@@ -2,6 +2,7 @@ use crate::mon2y::action::Action;
 use crate::mon2y::node::ActResponse;
 use crate::mon2y::state::State;
 use std::any::Any;
+use std::io;
 const BOARD_WIDTH: usize = 7;
 const BOARD_HEIGHT: usize = 6;
 
@@ -29,13 +30,23 @@ impl State for C4State {
     }
 }
 
-pub fn init_game() -> impl State {
-    C4State {
+pub fn init_game() -> ActResponse {
+    let state = C4State {
         board: vec![Cell::Empty; BOARD_HEIGHT * BOARD_WIDTH],
         next_player: 0,
+    };
+    ActResponse {
+        permitted_actions: permitted_actions(&state),
+        state: Box::new(state),
+        next_player: Some(0),
+        reward: None,
+        terminated: false,
+        next_act_fn: Box::new(act),
+        memo: None,
     }
 }
 
+#[derive(PartialEq)]
 enum Result {
     Winner(u8),
     Stalemate,
@@ -110,6 +121,13 @@ fn check_for_win(board: &Board) -> Result {
     Result::Ongoing
 }
 
+fn permitted_actions(state: &C4State) -> Vec<Action> {
+    (0..BOARD_WIDTH)
+        .filter(|&i| state.board[i] == Cell::Empty)
+        .map(|i| Action::Num(i as i32))
+        .collect::<Vec<Action>>()
+}
+
 fn act(generic_state: &dyn State, action: Action) -> ActResponse {
     let state = generic_state
         .as_any()
@@ -130,11 +148,6 @@ fn act(generic_state: &dyn State, action: Action) -> ActResponse {
         }
     }
 
-    let permitted_actions = (0..BOARD_WIDTH)
-        .filter(|&i| new_state.board[i] == Cell::Empty)
-        .map(|i| Action::Num(i as i32))
-        .collect::<Vec<Action>>();
-
     let winner = check_for_win(&new_state.board);
 
     let reward: Option<Vec<f64>> = match winner {
@@ -149,11 +162,43 @@ fn act(generic_state: &dyn State, action: Action) -> ActResponse {
     let next_player = new_state.next_player;
 
     ActResponse {
-        permitted_actions,
+        permitted_actions: permitted_actions(&new_state),
         state: Box::new(new_state),
         next_player: Some(next_player),
         reward,
+        terminated: winner != Result::Ongoing,
         next_act_fn: Box::new(act),
         memo: None,
     }
+}
+
+pub fn get_human_turn(state: &dyn State) -> Action {
+    let state = state
+        .as_any()
+        .downcast_ref::<C4State>()
+        .expect("Expected C4State");
+    for x in 0..BOARD_WIDTH {
+        print!("{}", x);
+    }
+    print!("\n");
+    for y in 0..BOARD_HEIGHT {
+        for x in 0..BOARD_WIDTH {
+            print!(
+                "{}",
+                match (state.board[y * BOARD_WIDTH + x]) {
+                    Cell::Empty => "◌",
+                    Cell::Filled(1) => "◍",
+                    Cell::Filled(0) => "●",
+                    _ => " ",
+                }
+            )
+        }
+        print!("\n");
+    }
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+    let action = input.trim().parse().expect("Failed to parse action");
+    Action::Num(action)
 }

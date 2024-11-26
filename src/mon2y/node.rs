@@ -18,6 +18,7 @@ pub struct ActResponse {
     pub state: Box<dyn State>,
     pub next_player: Option<u8>,
     pub reward: Option<Vec<f64>>,
+    pub terminated: bool,
     pub next_act_fn: Box<ActCallable>,
     pub memo: Option<Box<str>>,
 }
