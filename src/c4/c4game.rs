@@ -7,7 +7,7 @@ const BOARD_WIDTH: usize = 7;
 const BOARD_HEIGHT: usize = 6;
 
 // I know it's a fixed size, but this makes other things way easier
-type Board = Vec<Cell>;
+pub type Board = Vec<Cell>;
 
 #[derive(Copy, Clone, PartialEq, serde::Serialize)]
 enum Cell {
@@ -54,6 +54,11 @@ enum Result {
 }
 
 fn check_for_win(board: &Board) -> Result {
+    // Check stalemate
+    if board.iter().all(|&cell| cell != Cell::Empty) {
+        return Result::Stalemate;
+    }
+
     // Check Horizontal win
     for row in 0..BOARD_HEIGHT {
         for column in 0..BOARD_WIDTH - 3 {
