@@ -4,6 +4,7 @@ mod mon2y;
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use clap::{Parser, ValueEnum};
 use mon2y::{action::Action, state::State};
+use rand::Rng;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum Games {
@@ -59,10 +60,23 @@ fn main() {
 
     let mut last_response = args.game.init();
 
+    let players = args.players;
+
     while !last_response.terminated {
-        last_response = (last_response.next_act_fn)(
-            &*last_response.state,
-            args.game.get_human_turn(&*last_response.state),
-        );
+        if let Some(next_act_fn) = last_response.next_act_fn {
+            let state = &*last_response.state;
+            let action = if let Some(player_index) = last_response.next_player {
+                match players.get(player_index as usize) {
+                    Some(PlayerType::H) => args.game.get_human_turn(state),
+                    Some(PlayerType::R) => last_response.permitted_actions
+                        [rand::thread_rng().gen_range(0..last_response.permitted_actions.len())]
+                    .clone(),
+                    _ => todo!(),
+                }
+            } else {
+                Action::NoAct
+            };
+            last_response = next_act_fn(state, action);
+        }
     }
 }

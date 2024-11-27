@@ -10,7 +10,7 @@ const BOARD_HEIGHT: usize = 6;
 pub type Board = Vec<Cell>;
 
 #[derive(Copy, Clone, PartialEq, serde::Serialize)]
-enum Cell {
+pub enum Cell {
     Empty,
     Filled(u8),
 }
@@ -37,11 +37,11 @@ pub fn init_game() -> ActResponse {
     };
     ActResponse {
         permitted_actions: permitted_actions(&state),
-        state: Box::new(state),
+        state: state,
         next_player: Some(0),
         reward: None,
         terminated: false,
-        next_act_fn: Box::new(act),
+        next_act_fn: Some(act),
         memo: None,
     }
 }
@@ -172,7 +172,7 @@ fn act(generic_state: &dyn State, action: Action) -> ActResponse {
         next_player: Some(next_player),
         reward,
         terminated: winner != Result::Ongoing,
-        next_act_fn: Box::new(act),
+        next_act_fn: Some(act),
         memo: None,
     }
 }
@@ -190,7 +190,7 @@ pub fn get_human_turn(state: &dyn State) -> Action {
         for x in 0..BOARD_WIDTH {
             print!(
                 "{}",
-                match (state.board[y * BOARD_WIDTH + x]) {
+                match state.board[y * BOARD_WIDTH + x] {
                     Cell::Empty => "◌",
                     Cell::Filled(1) => "◍",
                     Cell::Filled(0) => "●",
