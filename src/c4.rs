@@ -6,7 +6,7 @@ use crate::mon2y::{Action, Actor, State};
 const BOARD_WIDTH: usize = 7;
 const BOARD_HEIGHT: usize = 6;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum C4Action {
     Drop(u8),
 }
@@ -25,17 +25,18 @@ impl Action for C4Action {
                     }
                 }
                 let winner = check_for_win(&new_board);
-                let terminal = match winner {
-                    CheckForWinResult::Winner(0) => true,
-                    CheckForWinResult::Winner(1) => true,
-                    CheckForWinResult::Stalemate => true,
-                    CheckForWinResult::Ongoing => false,
-                    _ => false,
+                let (terminal, reward) = match winner {
+                    CheckForWinResult::Winner(0) => (true, [0.0 as f64, 1.0 as f64].to_vec()),
+                    CheckForWinResult::Winner(1) => (true, [1.0 as f64, 0.0 as f64].to_vec()),
+                    CheckForWinResult::Stalemate => (true, [-0.5 as f64, -0.5 as f64].to_vec()),
+                    CheckForWinResult::Ongoing => (false, [0.0 as f64, 0.0 as f64].to_vec()),
+                    _ => panic!("Unexpected check_for_win result"),
                 };
                 C4State {
                     board: new_board,
                     next_player: (state.next_player + 1) % 2,
                     terminal,
+                    reward,
                 }
             }
         }
@@ -132,6 +133,7 @@ pub struct C4State {
     board: Vec<C4Cell>,
     next_player: u8,
     terminal: bool,
+    reward: Vec<f64>,
 }
 
 impl State for C4State {
@@ -146,7 +148,11 @@ impl State for C4State {
         Actor::Player(self.next_player)
     }
     fn terminal(&self) -> bool {
-        return self.terminal;
+        self.terminal
+    }
+
+    fn reward(&self) -> Vec<f64> {
+        self.reward.clone()
     }
 }
 
@@ -187,6 +193,7 @@ impl Game for C4 {
             board: vec![C4Cell::Empty; BOARD_HEIGHT * BOARD_WIDTH],
             next_player: 0,
             terminal: false,
+            reward: [0.0 as f64, 0.0 as f64].to_vec(),
         }
     }
 }
