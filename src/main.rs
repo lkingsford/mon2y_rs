@@ -1,82 +1,107 @@
-mod c4;
-mod mon2y;
+use std::collections::HashMap;
 
-//use crate::mon2y::action_log::{Action, ActionLogEntry};
-use clap::{Parser, ValueEnum};
-use mon2y::{action::Action, state::State};
-use rand::Rng;
-
-#[derive(Debug, Clone, ValueEnum)]
-enum Games {
-    C4,
+trait Action {
+    type StateType: State<ActionType = Self>;
+    fn execute(&self, state: &Self::StateType) -> Self::StateType;
 }
 
-fn parse_players(s: &str) -> Result<Vec<PlayerType>, String> {
-    s.split(',')
-        .map(|part| PlayerType::from_str(part, true))
-        .collect()
+enum C4Action {
+    Drop(u8),
 }
 
-impl Games {
-    fn init(&self) -> mon2y::node::ActResponse {
-        match self {
-            Games::C4 => c4::c4game::init_game(),
-        }
-    }
-
-    fn get_human_turn(&self, state: &dyn State) -> Action {
-        match self {
-            Games::C4 => c4::c4game::get_human_turn(state),
-        }
+impl Action for C4Action {
+    type StateType = C4State;
+    fn execute(&self, state: &C4State) -> C4State {
+        todo!()
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
-enum PlayerType {
-    H,
-    R,
-    M,
+enum Actor {
+    Player(u8),
+    GameAction,
 }
 
-#[derive(Debug, Parser)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg()]
-    game: Games,
+type Reward = Vec<f64>;
 
-    /// Players participating in the game
-    #[arg(short, long, value_delimiter = ',', value_enum)]
-    players: Vec<PlayerType>,
-
-    #[command(flatten)]
-    verbose: clap_verbosity_flag::Verbosity,
+trait State {
+    type ActionType: Action<StateType = Self>;
+    fn permitted_actions(&self) -> Vec<Self::ActionType>;
+    fn next_actor(&self) -> Actor;
+    fn terminal(&self) -> bool;
 }
 
-fn main() {
-    let args = Args::parse();
-    env_logger::Builder::new()
-        .filter_level(args.verbose.log_level_filter())
-        .init();
+enum C4Cell {
+    Empty,
+    Filled(u8),
+}
 
-    let mut last_response = args.game.init();
+struct C4State {
+    board: Vec<C4Cell>,
+    next_player: u8,
+}
 
-    let players = args.players;
+impl State for C4State {
+    type ActionType = C4Action;
+    fn permitted_actions(&self) -> Vec<Self::ActionType> {
+        todo!()
+    }
+    fn next_actor(&self) -> Actor {
+        Actor::Player(self.next_player)
+    }
+    fn terminal(&self) -> bool {
+        todo!()
+    }
+}
 
-    while !last_response.terminated {
-        if let Some(next_act_fn) = last_response.next_act_fn {
-            let state = &*last_response.state;
-            let action = if let Some(player_index) = last_response.next_player {
-                match players.get(player_index as usize) {
-                    Some(PlayerType::H) => args.game.get_human_turn(state),
-                    Some(PlayerType::R) => last_response.permitted_actions
-                        [rand::thread_rng().gen_range(0..last_response.permitted_actions.len())]
-                    .clone(),
-                    _ => todo!(),
-                }
-            } else {
-                Action::NoAct
-            };
-            last_response = next_act_fn(state, action);
-        }
+enum Node<StateType: State, ActionType: Action> {
+    Expanded(ExpandedNode<StateType, ActionType>),
+    Placeholder,
+}
+
+struct ExpandedNode<StateType: State, ActionType: Action> {
+    state: StateType,
+    children: HashMap<ActionType, Node<StateType, ActionType>>,
+    visit_count: u32,
+    value_sum: f64,
+}
+
+struct Selection<StateType: State, ActionType: Action> {
+    state: StateType,
+    path: Vec<ActionType>,
+}
+
+impl ExpandedNode<C4State, C4Action> {
+    fn fully_explored(&self) -> bool {
+        todo!()
+    }
+}
+
+pub struct Tree<StateType: State, ActionType: Action> {
+    root: Node<StateType, ActionType>,
+}
+
+impl<StateType: State, ActionType: Action> Tree<StateType, ActionType> {
+    pub fn best_pick(&self) -> Vec<ActionType> {
+        todo!()
+    }
+
+    pub fn selection(&self) -> Selection<StateType, ActionType> {
+        todo!()
+    }
+
+    pub fn expansion(&mut self, selection: Selection<StateType, ActionType>) {
+        todo!()
+    }
+
+    pub fn play_out(&self, selection: Selection<StateType, ActionType>) -> Option<Reward> {
+        todo!()
+    }
+
+    pub fn propagate_reward(
+        &mut self,
+        selection: Selection<StateType, ActionType>,
+        reward: Reward,
+    ) {
+        todo!()
     }
 }
