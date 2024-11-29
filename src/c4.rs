@@ -1,3 +1,5 @@
+use std::io;
+
 use crate::game::Game;
 use crate::mon2y::{Action, Actor, State};
 
@@ -12,9 +14,114 @@ pub enum C4Action {
 impl Action for C4Action {
     type StateType = C4State;
     fn execute(&self, state: &C4State) -> C4State {
-        todo!()
+        let mut new_board = state.board.clone();
+        match self {
+            C4Action::Drop(x) => {
+                let column = *x as usize;
+                for y in (0..BOARD_HEIGHT).rev() {
+                    if new_board[y * BOARD_WIDTH + column] == C4Cell::Empty {
+                        new_board[y * BOARD_WIDTH + column] = C4Cell::Filled(state.next_player);
+                        break;
+                    }
+                }
+                let winner = check_for_win(&new_board);
+                let terminal = match winner {
+                    CheckForWinResult::Winner(0) => true,
+                    CheckForWinResult::Winner(1) => true,
+                    CheckForWinResult::Stalemate => true,
+                    CheckForWinResult::Ongoing => false,
+                    _ => false,
+                };
+                C4State {
+                    board: new_board,
+                    next_player: (state.next_player + 1) % 2,
+                    terminal,
+                }
+            }
+        }
     }
 }
+
+#[derive(PartialEq)]
+enum CheckForWinResult {
+    Winner(u8),
+    Stalemate,
+    Ongoing,
+}
+
+fn check_for_win(board: &Vec<C4Cell>) -> CheckForWinResult {
+    // Check stalemate
+    if board.iter().all(|&cell| cell != C4Cell::Empty) {
+        return CheckForWinResult::Stalemate;
+    }
+
+    // Check Horizontal win
+    for row in 0..BOARD_HEIGHT {
+        for column in 0..BOARD_WIDTH - 3 {
+            if board[row * BOARD_WIDTH + column] == board[row * BOARD_WIDTH + column + 1]
+                && board[row * BOARD_WIDTH + column] == board[row * BOARD_WIDTH + column + 2]
+                && board[row * BOARD_WIDTH + column] == board[row * BOARD_WIDTH + column + 3]
+                && board[row * BOARD_WIDTH + column] != C4Cell::Empty
+            {
+                return CheckForWinResult::Winner(match board[row * BOARD_WIDTH + column] {
+                    C4Cell::Filled(player) => player,
+                    _ => unreachable!(),
+                });
+            }
+        }
+    }
+
+    // Check Vertical win
+    for column in 0..BOARD_WIDTH {
+        for row in 0..BOARD_HEIGHT - 3 {
+            if board[row * BOARD_WIDTH + column] == board[(row + 1) * BOARD_WIDTH + column]
+                && board[row * BOARD_WIDTH + column] == board[(row + 2) * BOARD_WIDTH + column]
+                && board[row * BOARD_WIDTH + column] == board[(row + 3) * BOARD_WIDTH + column]
+                && board[row * BOARD_WIDTH + column] != C4Cell::Empty
+            {
+                return CheckForWinResult::Winner(match board[row * BOARD_WIDTH + column] {
+                    C4Cell::Filled(player) => player,
+                    _ => unreachable!(),
+                });
+            }
+        }
+    }
+
+    // Check \ win
+    for column in 0..BOARD_WIDTH - 3 {
+        for row in 0..BOARD_HEIGHT - 3 {
+            if board[row * BOARD_WIDTH + column] == board[(row + 1) * BOARD_WIDTH + column + 1]
+                && board[row * BOARD_WIDTH + column] == board[(row + 2) * BOARD_WIDTH + column + 2]
+                && board[row * BOARD_WIDTH + column] == board[(row + 3) * BOARD_WIDTH + column + 3]
+                && board[row * BOARD_WIDTH + column] != C4Cell::Empty
+            {
+                return CheckForWinResult::Winner(match board[row * BOARD_WIDTH + column] {
+                    C4Cell::Filled(player) => player,
+                    _ => unreachable!(),
+                });
+            }
+        }
+    }
+
+    // Check / win
+    for column in 0..BOARD_WIDTH - 3 {
+        for row in 3..BOARD_HEIGHT {
+            if board[row * BOARD_WIDTH + column] == board[(row - 1) * BOARD_WIDTH + column + 1]
+                && board[row * BOARD_WIDTH + column] == board[(row - 2) * BOARD_WIDTH + column + 2]
+                && board[row * BOARD_WIDTH + column] == board[(row - 3) * BOARD_WIDTH + column + 3]
+                && board[row * BOARD_WIDTH + column] != C4Cell::Empty
+            {
+                return CheckForWinResult::Winner(match board[row * BOARD_WIDTH + column] {
+                    C4Cell::Filled(player) => player,
+                    _ => unreachable!(),
+                });
+            }
+        }
+    }
+
+    CheckForWinResult::Ongoing
+}
+
 #[derive(Copy, Clone, PartialEq)]
 enum C4Cell {
     Empty,
@@ -24,18 +131,22 @@ enum C4Cell {
 pub struct C4State {
     board: Vec<C4Cell>,
     next_player: u8,
+    terminal: bool,
 }
 
 impl State for C4State {
     type ActionType = C4Action;
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
-        todo!()
+        (0..BOARD_WIDTH)
+            .filter(|&i| self.board[i] == C4Cell::Empty)
+            .map(|i| C4Action::Drop(i as u8))
+            .collect::<Vec<C4Action>>()
     }
     fn next_actor(&self) -> Actor<C4Action> {
         Actor::Player(self.next_player)
     }
     fn terminal(&self) -> bool {
-        todo!()
+        return self.terminal;
     }
 }
 
@@ -45,12 +156,37 @@ impl Game for C4 {
     type StateType = C4State;
     type ActionType = C4Action;
     fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
-        todo!()
+        for x in 0..BOARD_WIDTH {
+            print!("{}", x);
+        }
+        print!("\n");
+        for y in 0..BOARD_HEIGHT {
+            for x in 0..BOARD_WIDTH {
+                print!(
+                    "{}",
+                    match state.board[y * BOARD_WIDTH + x] {
+                        C4Cell::Empty => "◦",
+                        C4Cell::Filled(1) => "◯",
+                        C4Cell::Filled(0) => "●",
+                        _ => " ",
+                    }
+                )
+            }
+            print!("\n");
+        }
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read line");
+        let action = input.trim().parse().expect("Failed to parse action");
+        C4Action::Drop(action)
     }
+
     fn init_game(&self) -> Self::StateType {
         C4State {
             board: vec![C4Cell::Empty; BOARD_HEIGHT * BOARD_WIDTH],
             next_player: 0,
+            terminal: false,
         }
     }
 }
