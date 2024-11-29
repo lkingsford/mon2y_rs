@@ -23,27 +23,31 @@ pub trait State {
     fn permitted_actions(&self) -> Vec<Self::ActionType>;
     fn next_actor(&self) -> Actor<Self::ActionType>;
     fn terminal(&self) -> bool;
+    fn reward(&self) -> Vec<f64>;
 }
 
-enum Node<StateType: State, ActionType: Action> {
+pub enum Node<StateType: State, ActionType: Action> {
     Expanded(ExpandedNode<StateType, ActionType>),
     Placeholder,
 }
 
-struct ExpandedNode<StateType: State, ActionType: Action> {
+pub struct ExpandedNode<StateType: State, ActionType: Action> {
     state: StateType,
     children: HashMap<ActionType, Node<StateType, ActionType>>,
     visit_count: u32,
     value_sum: f64,
 }
 
-struct Selection<StateType: State, ActionType: Action> {
+pub struct Selection<StateType: State, ActionType: Action> {
     state: StateType,
     path: Vec<ActionType>,
 }
 
 impl<StateType: State, ActionType: Action> ExpandedNode<StateType, ActionType> {
     fn fully_explored(&self) -> bool {
+        todo!()
+    }
+    pub fn best_pick(&self) -> Vec<ActionType> {
         todo!()
     }
 }
@@ -53,10 +57,6 @@ pub struct Tree<StateType: State, ActionType: Action> {
 }
 
 impl<StateType: State, ActionType: Action> Tree<StateType, ActionType> {
-    pub fn best_pick(&self) -> Vec<ActionType> {
-        todo!()
-    }
-
     pub fn selection(&self) -> Selection<StateType, ActionType> {
         todo!()
     }
