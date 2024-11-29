@@ -1,107 +1,75 @@
-use std::collections::HashMap;
+mod c4;
+mod game;
+mod mon2y;
 
-trait Action {
-    type StateType: State<ActionType = Self>;
-    fn execute(&self, state: &Self::StateType) -> Self::StateType;
+//use crate::mon2y::action_log::{Action, ActionLogEntry};
+use c4::C4;
+use clap::{Parser, ValueEnum};
+use game::Game;
+use mon2y::{Action, Actor, State};
+use rand::Rng;
+
+#[derive(Debug, Clone, ValueEnum)]
+enum Games {
+    C4,
 }
 
-enum C4Action {
-    Drop(u8),
+#[derive(Debug, Clone, ValueEnum)]
+enum PlayerType {
+    H,
+    R,
+    M,
 }
 
-impl Action for C4Action {
-    type StateType = C4State;
-    fn execute(&self, state: &C4State) -> C4State {
-        todo!()
+#[derive(Debug, Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg()]
+    game: Games,
+
+    /// Players participating in the game
+    #[arg(short, long, value_delimiter = ',', value_enum)]
+    players: Vec<PlayerType>,
+
+    #[command(flatten)]
+    verbose: clap_verbosity_flag::Verbosity,
+}
+
+fn run_game<G: Game>(game: G, players: Vec<PlayerType>) {
+    let mut state = game.init_game();
+
+    while !state.terminal() {
+        let actor = state.next_actor();
+        match actor {
+            Actor::Player(player) => {
+                let action: G::ActionType = match players.get(player as usize) {
+                    Some(PlayerType::H) => game.get_human_turn(&state),
+                    Some(PlayerType::R) => {
+                        let permitted_actions = state.permitted_actions();
+                        permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
+                    }
+                    _ => todo!(),
+                };
+                state = action.execute(&state);
+            }
+            Actor::GameAction(action) => {
+                state = action.execute(&state);
+            }
+        }
     }
 }
 
-enum Actor {
-    Player(u8),
-    GameAction,
-}
+fn main() {
+    let args = Args::parse();
+    env_logger::Builder::new()
+        .filter_level(args.verbose.log_level_filter())
+        .init();
 
-type Reward = Vec<f64>;
+    let players = args.players;
 
-trait State {
-    type ActionType: Action<StateType = Self>;
-    fn permitted_actions(&self) -> Vec<Self::ActionType>;
-    fn next_actor(&self) -> Actor;
-    fn terminal(&self) -> bool;
-}
-
-enum C4Cell {
-    Empty,
-    Filled(u8),
-}
-
-struct C4State {
-    board: Vec<C4Cell>,
-    next_player: u8,
-}
-
-impl State for C4State {
-    type ActionType = C4Action;
-    fn permitted_actions(&self) -> Vec<Self::ActionType> {
-        todo!()
-    }
-    fn next_actor(&self) -> Actor {
-        Actor::Player(self.next_player)
-    }
-    fn terminal(&self) -> bool {
-        todo!()
-    }
-}
-
-enum Node<StateType: State, ActionType: Action> {
-    Expanded(ExpandedNode<StateType, ActionType>),
-    Placeholder,
-}
-
-struct ExpandedNode<StateType: State, ActionType: Action> {
-    state: StateType,
-    children: HashMap<ActionType, Node<StateType, ActionType>>,
-    visit_count: u32,
-    value_sum: f64,
-}
-
-struct Selection<StateType: State, ActionType: Action> {
-    state: StateType,
-    path: Vec<ActionType>,
-}
-
-impl ExpandedNode<C4State, C4Action> {
-    fn fully_explored(&self) -> bool {
-        todo!()
-    }
-}
-
-pub struct Tree<StateType: State, ActionType: Action> {
-    root: Node<StateType, ActionType>,
-}
-
-impl<StateType: State, ActionType: Action> Tree<StateType, ActionType> {
-    pub fn best_pick(&self) -> Vec<ActionType> {
-        todo!()
-    }
-
-    pub fn selection(&self) -> Selection<StateType, ActionType> {
-        todo!()
-    }
-
-    pub fn expansion(&mut self, selection: Selection<StateType, ActionType>) {
-        todo!()
-    }
-
-    pub fn play_out(&self, selection: Selection<StateType, ActionType>) -> Option<Reward> {
-        todo!()
-    }
-
-    pub fn propagate_reward(
-        &mut self,
-        selection: Selection<StateType, ActionType>,
-        reward: Reward,
-    ) {
-        todo!()
+    match args.game {
+        Games::C4 => {
+            run_game(C4, players);
+        }
     }
 }
