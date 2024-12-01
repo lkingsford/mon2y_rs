@@ -84,7 +84,15 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         if let Node::Expanded(node) = self {
             node.children.insert(action, child);
         } else {
-            panic!("Expanding a placeholder node");
+            panic!("Inserting child into placeholder");
+        }
+    }
+
+    fn get_child(&mut self, action: ActionType) -> &mut Node<StateType, ActionType> {
+        if let Node::Expanded(node) = self {
+            node.children.get_mut(&action).unwrap()
+        } else {
+            panic!("Getting child from placeholder");
         }
     }
 }
@@ -173,40 +181,11 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Tree<StateType
         if let Selection::Selection(selection) = selection {
             for action in &selection {
                 // Navigate the tree by taking mutable references
-                if let Node::Expanded(current) = cur_node {
-                    if let Some(child) = current.children.get_mut(action) {
-                        cur_node = child;
-                    } else {
-                        warn!("Tried to navigate to a nonexistent child");
-                        return;
-                    }
-                } else {
-                    warn!("Tried to navigate a placeholder node");
-                    return;
-                }
+                let parent_state = cur_node.state();
+                let mut expanded_child = cur_node.expansion(*action, parent_state);
+                cur_node.insert_child(action.clone(), expanded_child);
+                cur_node = cur_node.get_child(*action);
             }
-
-            // Handle expansion at the leaf node
-            if let Some(last_action) = selection.last() {
-                // Extract parent state immutably
-                let parent_state = match cur_node {
-                    Node::Expanded(parent_node) => &parent_node.state,
-                    _ => {
-                        warn!("Parent node not expanded");
-                        return;
-                    }
-                };
-
-                // Prepare the new node outside of the mutable borrow of cur_node
-                let expanded_node = {
-                    let current_node = cur_node; // temporary immutable borrow
-                    current_node.expansion(*last_action, parent_state)
-                };
-            } else {
-                warn!("Tried to expand the root node without a valid action");
-            }
-        } else {
-            warn!("Tried to expand a fully explored node");
         }
     }
 

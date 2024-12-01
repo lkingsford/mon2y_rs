@@ -6,7 +6,7 @@ use crate::mon2y::{Action, Actor, State};
 const BOARD_WIDTH: usize = 7;
 const BOARD_HEIGHT: usize = 6;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum C4Action {
     Drop(u8),
 }
