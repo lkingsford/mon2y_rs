@@ -2,7 +2,7 @@ use log::{debug, info, warn};
 use std::collections::HashMap;
 
 use rand::Rng;
-pub trait Action: Clone + Copy {
+pub trait Action: Clone + Copy + Eq + std::hash::Hash {
     type StateType: State<ActionType = Self>;
     fn execute(&self, state: &Self::StateType) -> Self::StateType;
 }
@@ -71,6 +71,21 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             visit_count: 0,
             value_sum: 0.0,
         })
+    }
+
+    fn state(&self) -> &StateType {
+        match self {
+            Node::Expanded(node) => &node.state,
+            Node::Placeholder => panic!("Placeholder node has no state"),
+        }
+    }
+
+    fn insert_child(&mut self, action: ActionType, child: Node<StateType, ActionType>) {
+        if let Node::Expanded(node) = self {
+            node.children.insert(action, child);
+        } else {
+            panic!("Expanding a placeholder node");
+        }
     }
 }
 
@@ -152,7 +167,48 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Tree<StateType
         Selection::Selection(result)
     }
 
-    pub fn expansion(&mut self, selection: Selection<ActionType>) {}
+    pub fn expansion(&mut self, selection: Selection<ActionType>) {
+        let mut cur_node = &mut self.root;
+
+        if let Selection::Selection(selection) = selection {
+            for action in &selection {
+                // Navigate the tree by taking mutable references
+                if let Node::Expanded(current) = cur_node {
+                    if let Some(child) = current.children.get_mut(action) {
+                        cur_node = child;
+                    } else {
+                        warn!("Tried to navigate to a nonexistent child");
+                        return;
+                    }
+                } else {
+                    warn!("Tried to navigate a placeholder node");
+                    return;
+                }
+            }
+
+            // Handle expansion at the leaf node
+            if let Some(last_action) = selection.last() {
+                // Extract parent state immutably
+                let parent_state = match cur_node {
+                    Node::Expanded(parent_node) => &parent_node.state,
+                    _ => {
+                        warn!("Parent node not expanded");
+                        return;
+                    }
+                };
+
+                // Prepare the new node outside of the mutable borrow of cur_node
+                let expanded_node = {
+                    let current_node = cur_node; // temporary immutable borrow
+                    current_node.expansion(*last_action, parent_state)
+                };
+            } else {
+                warn!("Tried to expand the root node without a valid action");
+            }
+        } else {
+            warn!("Tried to expand a fully explored node");
+        }
+    }
 
     pub fn play_out(&self, selection: Selection<ActionType>) -> Option<Reward> {
         todo!()
