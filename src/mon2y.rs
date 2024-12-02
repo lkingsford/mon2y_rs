@@ -146,7 +146,9 @@ pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
     constant: f64,
 }
 
-impl<StateType: State, ActionType: Action<StateType = StateType>> Tree<StateType, ActionType> {
+impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = StateType>>
+    Tree<StateType, ActionType>
+{
     pub fn new(root: Node<StateType, ActionType>) -> Tree<StateType, ActionType> {
         Tree {
             root,
@@ -183,6 +185,12 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Tree<StateType
                 // Navigate the tree by taking mutable references
                 let parent_state = cur_node.state();
                 let mut expanded_child = cur_node.expansion(*action, parent_state);
+                let actions = expanded_child.state().permitted_actions();
+                for action in actions {
+                    // This should probably be in node.expansion, but my baby-rust
+                    // brain can't quite figure it out right now.
+                    expanded_child.insert_child(action, Node::Placeholder);
+                }
                 cur_node.insert_child(action.clone(), expanded_child);
                 cur_node = cur_node.get_child(*action);
             }
