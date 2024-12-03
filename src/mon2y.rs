@@ -73,17 +73,12 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         &self,
         action: ActionType,
         parent_state: &<ActionType as Action>::StateType,
-    ) -> Node<StateType, ActionType> {
+    ) -> Node<StateType, <StateType as State>::ActionType> {
         if let Node::Expanded { .. } = self {
             panic!("Expanding an expanded node");
         }
         let state = action.execute(parent_state);
-        Node::Expanded {
-            state,
-            children: HashMap::new(),
-            visit_count: 0,
-            value_sum: 0.0,
-        }
+        Self::new_expanded(state)
     }
     pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
         match self {
@@ -133,11 +128,24 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    //   fn new_expanded() -> Node<StateType, ActionType> {
+    fn new_expanded(state: StateType) -> Node<StateType, <StateType as State>::ActionType> {
+        let mut children = HashMap::new();
+        for action in state.permitted_actions() {
+            // This should probably be in node.expansion, but my baby-rust
+            // brain can't quite figure it out right now.
+            children.insert(action, Node::Placeholder);
+        }
+        Node::Expanded {
+            state,
+            children,
+            visit_count: 0,
+            value_sum: 0.0,
+        }
+    }
 }
 
 pub enum Selection<ActionType: Action> {
-    Fully_explored,
+    FullyExplored,
     Selection(Vec<ActionType>),
 }
 
@@ -161,12 +169,12 @@ impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = S
     ///
     pub fn selection(&self) -> Selection<ActionType> {
         if self.root.fully_explored() {
-            return Selection::Fully_explored;
+            return Selection::FullyExplored;
         }
         if let Node::Placeholder = self.root {
             return Selection::Selection(vec![]);
         }
-        let mut current_selection = &self.root;
+        let current_selection = &self.root;
         let mut result: Vec<ActionType> = vec![];
         while let Node::Expanded { .. } = current_selection {
             let best_picks = current_selection.best_pick(self.constant);
@@ -185,12 +193,6 @@ impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = S
                 // Navigate the tree by taking mutable references
                 let parent_state = cur_node.state();
                 let mut expanded_child = cur_node.expansion(*action, parent_state);
-                let actions = expanded_child.state().permitted_actions();
-                for action in actions {
-                    // This should probably be in node.expansion, but my baby-rust
-                    // brain can't quite figure it out right now.
-                    expanded_child.insert_child(action, Node::Placeholder);
-                }
                 cur_node.insert_child(action.clone(), expanded_child);
                 cur_node = cur_node.get_child(*action);
             }
@@ -205,6 +207,7 @@ impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = S
         todo!()
     }
 }
+
 /*
 #[cfg(test)]
 mod tests {
@@ -220,7 +223,7 @@ mod tests {
     impl State for TestGameState {
         type ActionType = TestGameAction;
         fn permitted_actions(&self) -> Vec<Self::ActionType> {
-            vec![TestGameAction{}]
+            self.injected_permitted_actions.clone()
         }
         fn next_actor(&self) -> Actor<Self::ActionType> {
             Actor::Player(0)
