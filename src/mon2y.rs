@@ -30,28 +30,41 @@ pub trait State {
 }
 
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
-    Expanded(ExpandedNode<StateType, ActionType>),
+    Expanded {
+        state: StateType,
+        children: HashMap<ActionType, Node<StateType, ActionType>>,
+        visit_count: u32,
+        value_sum: f64,
+    },
     Placeholder,
 }
 
 impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType, ActionType> {
     fn fully_explored(&self) -> bool {
         match self {
-            Node::Expanded(node) => node.fully_explored(),
+            Node::Expanded {
+                state, children, ..
+            } => {
+                children.is_empty()
+                    || children.iter().all(|(_, child)| match child {
+                        Node::Expanded { .. } => child.fully_explored(),
+                        Node::Placeholder => false,
+                    })
+            }
             Node::Placeholder => false,
         }
     }
 
     fn visit_count(&self) -> u32 {
         match self {
-            Node::Expanded(node) => node.visit_count,
+            Node::Expanded { visit_count, .. } => *visit_count,
             Node::Placeholder => 0,
         }
     }
 
     fn value_sum(&self) -> f64 {
         match self {
-            Node::Expanded(node) => node.value_sum,
+            Node::Expanded { value_sum, .. } => *value_sum,
             Node::Placeholder => 0.0,
         }
     }
@@ -61,84 +74,71 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         action: ActionType,
         parent_state: &<ActionType as Action>::StateType,
     ) -> Node<StateType, ActionType> {
-        if let Node::Expanded(_) = self {
+        if let Node::Expanded { .. } = self {
             panic!("Expanding an expanded node");
         }
         let state = action.execute(parent_state);
-        Node::Expanded(ExpandedNode {
+        Node::Expanded {
             state,
             children: HashMap::new(),
             visit_count: 0,
             value_sum: 0.0,
-        })
+        }
+    }
+    pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
+        match self {
+            Node::Expanded { children, .. } => {
+                let mut ucbs: Vec<(ActionType, f64)> = children
+                    .iter()
+                    .map(|(action, child_node)| {
+                        // UCB formula
+                        let q: f64 =
+                            child_node.value_sum() / (1.0 + child_node.visit_count() as f64);
+                        let u: f64 = (self.visit_count() as f64 / child_node.visit_count() as f64)
+                            .ln()
+                            .sqrt();
+                        // Random used to break ties
+                        // Todo: Cache the rng
+                        let r: f64 = rand::thread_rng().gen::<f64>() * 1e-6;
+                        (action.clone(), q + constant * u + r)
+                    })
+                    .collect();
+                ucbs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                ucbs.iter().map(|(action, _)| action.clone()).collect()
+            }
+            Node::Placeholder => Vec::new(),
+        }
     }
 
     fn state(&self) -> &StateType {
         match self {
-            Node::Expanded(node) => &node.state,
+            Node::Expanded { state, .. } => state,
             Node::Placeholder => panic!("Placeholder node has no state"),
         }
     }
 
     fn insert_child(&mut self, action: ActionType, child: Node<StateType, ActionType>) {
-        if let Node::Expanded(node) = self {
-            node.children.insert(action, child);
+        if let Node::Expanded { children, .. } = self {
+            children.insert(action, child);
         } else {
             panic!("Inserting child into placeholder");
         }
     }
 
     fn get_child(&mut self, action: ActionType) -> &mut Node<StateType, ActionType> {
-        if let Node::Expanded(node) = self {
-            node.children.get_mut(&action).unwrap()
+        if let Node::Expanded { children, .. } = self {
+            children.get_mut(&action).unwrap()
         } else {
             panic!("Getting child from placeholder");
         }
     }
-}
 
-pub struct ExpandedNode<StateType: State, ActionType: Action<StateType = StateType>> {
-    state: StateType,
-    children: HashMap<ActionType, Node<StateType, ActionType>>,
-    visit_count: u32,
-    value_sum: f64,
+    //   fn new_expanded() -> Node<StateType, ActionType> {
 }
 
 pub enum Selection<ActionType: Action> {
     Fully_explored,
     Selection(Vec<ActionType>),
-}
-
-impl<StateType: State, ActionType: Action<StateType = StateType>>
-    ExpandedNode<StateType, ActionType>
-{
-    fn fully_explored(&self) -> bool {
-        self.children.is_empty()
-            || self.children.iter().all(|(_, child)| match child {
-                Node::Expanded(child) => child.fully_explored(),
-                Node::Placeholder => false,
-            })
-    }
-
-    pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
-        let mut ucbs: Vec<(ActionType, f64)> = self
-            .children
-            .iter()
-            .map(|(action, child_node)| {
-                // UCB formula
-                let q: f64 = child_node.value_sum() / (1.0 + child_node.visit_count() as f64);
-                let u: f64 = (self.visit_count as f64 / child_node.visit_count() as f64)
-                    .ln()
-                    .sqrt();
-                // Random used to break ties
-                // Todo: Cache the rng
-                let r: f64 = rand::thread_rng().gen::<f64>() * 1e-6;
-                (action.clone(), q + constant * u + r)
-            })
-            .collect();
-        ucbs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        ucbs.iter().map(|(action, _)| action.clone()).collect()
-    }
 }
 
 pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
@@ -168,7 +168,7 @@ impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = S
         }
         let mut current_selection = &self.root;
         let mut result: Vec<ActionType> = vec![];
-        while let Node::Expanded(current_selection) = current_selection {
+        while let Node::Expanded { .. } = current_selection {
             let best_picks = current_selection.best_pick(self.constant);
             let best_pick = best_picks[0].clone();
             // Use `get_mut` to get a mutable reference from `children`
@@ -205,3 +205,60 @@ impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = S
         todo!()
     }
 }
+/*
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone)]
+    struct TestGameState {
+        injected_reward: Vec<f64>,
+        injected_terminal: bool,
+        injected_permitted_actions: Vec<TestGameAction>
+    }
+
+    impl State for TestGameState {
+        type ActionType = TestGameAction;
+        fn permitted_actions(&self) -> Vec<Self::ActionType> {
+            vec![TestGameAction{}]
+        }
+        fn next_actor(&self) -> Actor<Self::ActionType> {
+            Actor::Player(0)
+        }
+        fn reward(&self) -> Vec<f64> {
+            return self.injected_reward.clone()
+        }
+
+        fn terminal(&self) -> bool {
+            return self.injected_terminal
+        }
+
+    }
+
+    #[derive(Hash,Copy,  Clone, Eq, PartialEq)]
+    enum TestGameAction{
+        Win,
+        Pass
+    }
+    impl Action for TestGameAction {
+        type StateType = TestGameState;
+        fn execute(&self, state: &Self::StateType) -> Self::StateType {
+            state.clone()
+        }
+    }
+
+
+    #[test]
+    fn test_selection_basic(){
+        let root = Node::Expanded(
+            ExpandedNode {
+            state:TestGameState{
+                injected_reward: vec![0.0, 0.0],
+                injected_terminal: false,
+                injected_permitted_actions: vec![TestGameAction::Pass],
+            },
+            0},
+        )
+    }
+}
+ */
