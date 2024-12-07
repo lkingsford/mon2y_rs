@@ -129,6 +129,7 @@ enum C4Cell {
     Filled(u8),
 }
 
+#[derive(Clone)]
 pub struct C4State {
     board: Vec<C4Cell>,
     next_player: u8,

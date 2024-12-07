@@ -1,3 +1,4 @@
+use core::panic;
 use log::{debug, info, warn};
 use std::{cmp::max, collections::HashMap, path};
 
@@ -23,7 +24,7 @@ const MIN_CHILD_VISIT: f64 = 0.00000000001;
 
 type Reward = Vec<f64>;
 
-pub trait State {
+pub trait State: Clone {
     type ActionType: Action<StateType = Self>;
     fn permitted_actions(&self) -> Vec<Self::ActionType>;
     fn next_actor(&self) -> Actor<Self::ActionType>;
@@ -201,6 +202,9 @@ pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
 
 impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = StateType>>
     Tree<StateType, ActionType>
+where
+    StateType: State<ActionType = ActionType>,
+    ActionType: Action<StateType = StateType>,
 {
     pub fn new(root: Node<StateType, ActionType>) -> Tree<StateType, ActionType> {
         Tree {
@@ -256,8 +260,25 @@ impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = S
         }
     }
 
-    pub fn play_out(&self, selection: Selection<ActionType>) -> Option<Reward> {
-        todo!()
+    pub fn play_out(&self, selection_path: Vec<ActionType>) -> Option<Reward> {
+        let node = self.root.get_node_by_path(selection_path);
+        let mut rng = rand::thread_rng();
+
+        if let Node::Expanded { state, .. } = node {
+            let mut cur_state = Box::new(state.clone());
+
+            while !cur_state.terminal() {
+                let permitted_actions = cur_state.permitted_actions();
+
+                let action: ActionType =
+                    permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
+                cur_state = Box::new(action.execute(&cur_state));
+            }
+
+            Some(cur_state.reward())
+        } else {
+            panic!("Expected an expanded node");
+        }
     }
 
     pub fn propagate_reward(&mut self, selection: Selection<ActionType>, reward: Reward) {
@@ -307,6 +328,21 @@ mod tests {
                     injected_permitted_actions: (0..*c)
                         .map(|i| TestGameAction::WinInXTurns(i))
                         .collect(),
+                    ..state.clone()
+                },
+                TestGameAction::WinInXTurns(turns) => TestGameState {
+                    injected_permitted_actions: {
+                        if (*turns > 0) {
+                            vec![TestGameAction::WinInXTurns(turns - 1)]
+                        } else {
+                            vec![TestGameAction::Win]
+                        }
+                    },
+                    ..state.clone()
+                },
+                TestGameAction::Win => TestGameState {
+                    injected_terminal: true,
+                    injected_reward: vec![1.0],
                     ..state.clone()
                 },
                 _ => state.clone(),
@@ -389,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn text_expansion_basic() {
+    fn test_expansion_basic() {
         let root_state = TestGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
@@ -431,7 +467,32 @@ mod tests {
         if let Node::Expanded { children, .. } = node {
             assert_eq!(children.len(), 5);
         } else {
-            panic!("Node is not expanded");
+            self::panic!("Node is not expanded");
         }
+    }
+
+    #[test]
+    fn test_play_out() {
+        let root_state = TestGameState {
+            injected_reward: vec![0.0],
+            injected_terminal: false,
+            injected_permitted_actions: vec![TestGameAction::WinInXTurns(3)],
+        };
+
+        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let mut root = create_expanded_node(root_state);
+
+        let mut explored_node = create_expanded_node(explored_state);
+        explored_node.visit(0.0f64);
+
+        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
+        root.insert_child(TestGameAction::WinInXTurns(3), Node::Placeholder);
+        root.visit(0.0f64);
+        let tree = Tree::new(root);
+
+        let selection_path = vec![TestGameAction::WinInXTurns(2)];
+        let reward = tree.play_out(selection_path);
+
+        assert_eq!(reward, Some(vec![1.0]));
     }
 }
