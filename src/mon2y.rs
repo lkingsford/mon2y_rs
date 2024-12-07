@@ -22,7 +22,7 @@ pub enum Actor<ActionType> {
 
 const MIN_CHILD_VISIT: f64 = 0.00000000001;
 
-type Reward = Vec<f64>;
+type Reward = f64;
 
 pub trait State: Clone {
     type ActionType: Action<StateType = Self>;
@@ -32,11 +32,13 @@ pub trait State: Clone {
     fn reward(&self) -> Vec<f64>;
 }
 
+#[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
     Expanded {
         state: StateType,
         children: HashMap<ActionType, Node<StateType, ActionType>>,
         visit_count: u32,
+        /// Sum of rewards for this player
         value_sum: f64,
     },
     Placeholder,
@@ -260,7 +262,7 @@ where
         }
     }
 
-    pub fn play_out(&self, selection_path: Vec<ActionType>) -> Option<Reward> {
+    pub fn play_out(&self, selection_path: Vec<ActionType>) -> Vec<Reward> {
         let node = self.root.get_node_by_path(selection_path);
         let mut rng = rand::thread_rng();
 
@@ -274,20 +276,32 @@ where
                     permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
                 cur_state = Box::new(action.execute(&cur_state));
             }
-
-            Some(cur_state.reward())
+            debug!("Reward is {:?}", cur_state.reward());
+            cur_state.reward()
         } else {
             panic!("Expected an expanded node");
         }
     }
 
-    pub fn propagate_reward(&mut self, selection: Selection<ActionType>, reward: Reward) {
-        todo!()
+    pub fn propagate_reward(&mut self, selection_path: Vec<ActionType>, reward: Vec<Reward>) {
+        let mut cur_node = &mut self.root;
+        // Reward doesn't matter for root
+        cur_node.visit(0.0);
+        for action in selection_path {
+            let actor = cur_node.state().next_actor();
+            cur_node = cur_node.get_child_mut(action);
+            cur_node.visit(match actor {
+                Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
+                _ => 0.0,
+            });
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
 
     #[derive(Clone, Debug)]
@@ -295,6 +309,8 @@ mod tests {
         injected_reward: Vec<f64>,
         injected_terminal: bool,
         injected_permitted_actions: Vec<TestGameAction>,
+        player_count: u8,
+        next_player_id: u8,
     }
 
     impl State for TestGameState {
@@ -303,7 +319,7 @@ mod tests {
             self.injected_permitted_actions.clone()
         }
         fn next_actor(&self) -> Actor<Self::ActionType> {
-            Actor::Player(0)
+            Actor::Player(self.next_player_id)
         }
         fn reward(&self) -> Vec<f64> {
             return self.injected_reward.clone();
@@ -323,11 +339,17 @@ mod tests {
     impl Action for TestGameAction {
         type StateType = TestGameState;
         fn execute(&self, state: &Self::StateType) -> Self::StateType {
+            let next_player_id = if let Actor::Player(player_id) = state.next_actor() {
+                (player_id + 1) % state.player_count
+            } else {
+                self::panic!("Not a player");
+            };
             match self {
                 TestGameAction::NextTurnInjectActionCount(c) => TestGameState {
                     injected_permitted_actions: (0..*c)
                         .map(|i| TestGameAction::WinInXTurns(i))
                         .collect(),
+                    next_player_id,
                     ..state.clone()
                 },
                 TestGameAction::WinInXTurns(turns) => TestGameState {
@@ -338,14 +360,15 @@ mod tests {
                             vec![TestGameAction::Win]
                         }
                     },
+                    next_player_id,
                     ..state.clone()
                 },
                 TestGameAction::Win => TestGameState {
                     injected_terminal: true,
                     injected_reward: vec![1.0],
+                    next_player_id,
                     ..state.clone()
                 },
-                _ => state.clone(),
             }
         }
     }
@@ -362,6 +385,8 @@ mod tests {
                 TestGameAction::WinInXTurns(2),
                 TestGameAction::WinInXTurns(3),
             ],
+            player_count: 1,
+            next_player_id: 0,
         };
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
@@ -393,6 +418,8 @@ mod tests {
                 TestGameAction::WinInXTurns(2),
                 TestGameAction::WinInXTurns(3),
             ],
+            player_count: 1,
+            next_player_id: 0,
         };
 
         let mut explored_state_1 = TestGameAction::WinInXTurns(2).execute(&root_state);
@@ -433,6 +460,8 @@ mod tests {
                 TestGameAction::WinInXTurns(2),
                 TestGameAction::WinInXTurns(3),
             ],
+            player_count: 1,
+            next_player_id: 0,
         };
         let mut explored_state_1 = TestGameAction::WinInXTurns(2).execute(&root_state);
         explored_state_1.injected_permitted_actions =
@@ -477,6 +506,8 @@ mod tests {
             injected_reward: vec![0.0],
             injected_terminal: false,
             injected_permitted_actions: vec![TestGameAction::WinInXTurns(3)],
+            player_count: 1,
+            next_player_id: 0,
         };
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
@@ -493,6 +524,108 @@ mod tests {
         let selection_path = vec![TestGameAction::WinInXTurns(2)];
         let reward = tree.play_out(selection_path);
 
-        assert_eq!(reward, Some(vec![1.0]));
+        assert_eq!(reward, vec![1.0]);
+    }
+
+    #[test]
+    fn test_propagate_one_player() {
+        let root_state = TestGameState {
+            injected_reward: vec![0.0],
+            injected_terminal: false,
+            injected_permitted_actions: vec![
+                TestGameAction::WinInXTurns(2),
+                TestGameAction::WinInXTurns(3),
+            ],
+            player_count: 1,
+            next_player_id: 0,
+        };
+
+        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let mut root = create_expanded_node(root_state);
+
+        let mut explored_node = create_expanded_node(explored_state);
+
+        let mut child_node =
+            create_expanded_node(TestGameAction::WinInXTurns(1).execute(&explored_node.state()));
+
+        let grandchild_state = TestGameAction::Win.execute(&child_node.state());
+        let grandchild_node = create_expanded_node(grandchild_state);
+
+        child_node.insert_child(TestGameAction::Win, grandchild_node);
+        explored_node.insert_child(TestGameAction::WinInXTurns(1), child_node);
+        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
+        let mut tree = Tree::new(root);
+
+        let path = vec![
+            TestGameAction::WinInXTurns(2),
+            TestGameAction::WinInXTurns(1),
+            TestGameAction::Win,
+        ];
+        let check_path = path.clone();
+        const REWARD: f64 = 0.8;
+        tree.propagate_reward(path, vec![REWARD]);
+
+        for path_i in 1..=check_path.len() {
+            let semi_path = check_path[0..path_i].to_vec();
+            let node = tree.root.get_node_by_path(semi_path);
+            assert_eq!(node.value_sum(), REWARD);
+            assert_eq!(node.visit_count(), 1);
+        }
+    }
+
+    #[test]
+    fn test_propagate_two_players() {
+        let root_state = TestGameState {
+            injected_reward: vec![0.0],
+            injected_terminal: false,
+            injected_permitted_actions: vec![
+                TestGameAction::WinInXTurns(2),
+                TestGameAction::WinInXTurns(3),
+            ],
+            player_count: 2,
+            next_player_id: 0,
+        };
+
+        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let mut root = create_expanded_node(root_state);
+
+        let mut explored_node = create_expanded_node(explored_state);
+
+        let mut child_node =
+            create_expanded_node(TestGameAction::WinInXTurns(1).execute(&explored_node.state()));
+
+        let grandchild_state = TestGameAction::Win.execute(&child_node.state());
+        let grandchild_node = create_expanded_node(grandchild_state);
+
+        child_node.insert_child(TestGameAction::Win, grandchild_node);
+        explored_node.insert_child(TestGameAction::WinInXTurns(1), child_node);
+        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
+        let mut tree = Tree::new(root);
+
+        let path = vec![
+            TestGameAction::WinInXTurns(2),
+            TestGameAction::WinInXTurns(1),
+            TestGameAction::Win,
+        ];
+        let check_path = path.clone();
+        // Using slightly unusual rewards to just make more certain that it was actually this reward
+        const REWARD: f64 = 0.8;
+        const LOSS_REWARD: f64 = -0.6;
+        tree.propagate_reward(path, vec![REWARD, LOSS_REWARD]);
+
+        for path_i in 1..=check_path.len() {
+            // This isn't the greatest way to do this - maybe we should be just looking it up in a
+            // table.
+            let semi_path = check_path[0..path_i].to_vec();
+            let player_id = (path_i + 1) % 2;
+            let node = tree.root.get_node_by_path(semi_path);
+            if player_id == 0 {
+                assert_eq!(node.value_sum(), REWARD);
+                assert_eq!(node.visit_count(), 1);
+            } else {
+                assert_eq!(node.value_sum(), LOSS_REWARD);
+                assert_eq!(node.visit_count(), 1);
+            }
+        }
     }
 }
