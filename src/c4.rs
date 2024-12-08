@@ -162,7 +162,7 @@ pub struct C4;
 impl Game for C4 {
     type StateType = C4State;
     type ActionType = C4Action;
-    fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
+    fn visualise_state(&self, state: &Self::StateType) {
         for x in 0..BOARD_WIDTH {
             print!("{}", x);
         }
@@ -181,6 +181,8 @@ impl Game for C4 {
             }
             print!("\n");
         }
+    }
+    fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)

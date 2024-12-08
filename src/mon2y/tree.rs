@@ -1,5 +1,6 @@
 use super::game::{Action, Actor, State};
 use super::node::{create_expanded_node, Node};
+use super::BestTurnPolicy;
 use super::Reward;
 use core::panic;
 use log::debug;
@@ -50,7 +51,7 @@ where
         Selection::Selection(result)
     }
 
-    pub fn expansion(&mut self, selection: Selection<ActionType>) {
+    pub fn expansion(&mut self, selection: &Selection<ActionType>) {
         let mut cur_node = &mut self.root;
 
         if let Selection::Selection(selection) = selection {
@@ -108,6 +109,38 @@ where
                 Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
                 _ => 0.0,
             });
+        }
+    }
+
+    pub fn iterate(&mut self) {
+        let selection = self.selection();
+        if let Selection::FullyExplored = selection {
+            return;
+        };
+        self.expansion(&selection);
+        if let Selection::Selection(selection_path) = selection {
+            let reward = self.play_out(selection_path.clone());
+            self.propagate_reward(selection_path, reward);
+        }
+    }
+
+    pub fn calculate_best_turn(&mut self, iterations: usize, policy: BestTurnPolicy) -> ActionType {
+        for _ in 0..iterations {
+            &self.iterate();
+        }
+        match policy {
+            BestTurnPolicy::MostVisits => {
+                if let Node::Expanded { children, .. } = &self.root {
+                    children
+                        .iter()
+                        .max_by_key(|(_, node)| node.visit_count())
+                        .unwrap()
+                        .0
+                        .clone()
+                } else {
+                    panic!("Expected root to be an expanded node")
+                }
+            }
         }
     }
 }
@@ -305,7 +338,7 @@ mod tests {
         let selection = Selection::Selection(selection_path.clone());
 
         let mut tree = Tree::new(root);
-        tree.expansion(selection);
+        tree.expansion(&selection);
         let node = tree.root.get_node_by_path(selection_path);
         if let Node::Expanded { children, .. } = node {
             assert_eq!(children.len(), 5);

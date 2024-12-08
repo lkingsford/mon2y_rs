@@ -7,6 +7,8 @@ use c4::C4;
 use clap::{Parser, ValueEnum};
 use game::Game;
 use mon2y::game::{Action, Actor, State};
+use mon2y::{calculate_best_turn, BestTurnPolicy};
+
 use rand::Rng;
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -30,16 +32,18 @@ struct Args {
     /// Players participating in the game
     #[arg(short, long, value_delimiter = ',', value_enum)]
     players: Vec<PlayerType>,
-
     #[command(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
+    #[arg(short, long)]
+    iterations: usize,
 }
 
-fn run_game<G: Game>(game: G, players: Vec<PlayerType>) {
+fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize) {
     let mut state = game.init_game();
 
     while !state.terminal() {
         let actor = state.next_actor();
+        game.visualise_state(&state);
         match actor {
             Actor::Player(player) => {
                 let action: G::ActionType = match players.get(player as usize) {
@@ -47,6 +51,9 @@ fn run_game<G: Game>(game: G, players: Vec<PlayerType>) {
                     Some(PlayerType::R) => {
                         let permitted_actions = state.permitted_actions();
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
+                    }
+                    Some(PlayerType::M) => {
+                        calculate_best_turn(iterations, state.clone(), BestTurnPolicy::MostVisits)
                     }
                     _ => todo!(),
                 };
@@ -69,7 +76,7 @@ fn main() {
 
     match args.game {
         Games::C4 => {
-            run_game(C4, players);
+            run_game(C4, players, args.iterations);
         }
     }
 }
