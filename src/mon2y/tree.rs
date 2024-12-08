@@ -1,8 +1,9 @@
 use super::game::{Action, Actor, State};
 use super::node::{create_expanded_node, Node};
+use super::BestTurnPolicy;
 use super::Reward;
 use core::panic;
-use log::debug;
+use log::{debug, trace};
 use rand::Rng;
 
 #[derive(Debug, PartialEq)]
@@ -50,8 +51,9 @@ where
         Selection::Selection(result)
     }
 
-    pub fn expansion(&mut self, selection: Selection<ActionType>) {
+    pub fn expansion(&mut self, selection: &Selection<ActionType>) {
         let mut cur_node = &mut self.root;
+        trace!("Expansion: Selection: {:#?}", selection);
 
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
@@ -90,7 +92,7 @@ where
                     permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
                 cur_state = Box::new(action.execute(&cur_state));
             }
-            debug!("Reward is {:?}", cur_state.reward());
+            trace!("Reward is {:?}", cur_state.reward());
             cur_state.reward()
         } else {
             panic!("Expected an expanded node");
@@ -108,6 +110,68 @@ where
                 Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
                 _ => 0.0,
             });
+        }
+    }
+
+    pub fn iterate(&mut self) {
+        let selection = self.selection();
+        if let Selection::FullyExplored = selection {
+            return;
+        };
+        self.expansion(&selection);
+        if let Selection::Selection(selection_path) = selection {
+            let reward = self.play_out(selection_path.clone());
+            trace!("Before propagate");
+            if log::log_enabled!(log::Level::Trace) {
+                self.root.best_pick(self.constant);
+            }
+            self.propagate_reward(selection_path, reward);
+            trace!("After propagate");
+            if log::log_enabled!(log::Level::Trace) {
+                self.root.best_pick(self.constant);
+            }
+        }
+    }
+
+    pub fn calculate_best_turn(&mut self, iterations: usize, policy: BestTurnPolicy) -> ActionType {
+        for iteration in 0..iterations {
+            trace!("Starting iteration {}", iteration);
+            &self.iterate();
+        }
+        if log::log_enabled!(log::Level::Trace) {
+            self.root.trace_log_children(0);
+        }
+        match policy {
+            BestTurnPolicy::MostVisits => {
+                if let Node::Expanded { children, .. } = &self.root {
+                    debug!(
+                        "Action, Visits, Value: {:?}",
+                        children
+                            .iter()
+                            .map(|(action, node)| (
+                                action.clone(),
+                                node.visit_count(),
+                                node.value_sum()
+                            ))
+                            .collect::<Vec<_>>()
+                    );
+                    children
+                        .iter()
+                        .max_by_key(|(_, node)| node.visit_count())
+                        .unwrap()
+                        .0
+                        .clone()
+                } else {
+                    panic!("Expected root to be an expanded node")
+                }
+            }
+            BestTurnPolicy::UCB => {
+                if let Node::Expanded { .. } = &self.root {
+                    self.root.best_pick(0.0)[0].clone()
+                } else {
+                    panic!("Expected root to be an expanded node")
+                }
+            }
         }
     }
 }
@@ -305,7 +369,7 @@ mod tests {
         let selection = Selection::Selection(selection_path.clone());
 
         let mut tree = Tree::new(root);
-        tree.expansion(selection);
+        tree.expansion(&selection);
         let node = tree.root.get_node_by_path(selection_path);
         if let Node::Expanded { children, .. } = node {
             assert_eq!(children.len(), 5);
@@ -377,7 +441,7 @@ mod tests {
         ];
         let check_path = path.clone();
         const REWARD: f64 = 0.8;
-        tree.propagate_reward(path, vec![REWARD]);
+        tree.propagate_reward(path, REWARD);
 
         for path_i in 1..=check_path.len() {
             let semi_path = check_path[0..path_i].to_vec();
@@ -424,22 +488,15 @@ mod tests {
         let check_path = path.clone();
         // Using slightly unusual rewards to just make more certain that it was actually this reward
         const REWARD: f64 = 0.8;
-        const LOSS_REWARD: f64 = -0.6;
-        tree.propagate_reward(path, vec![REWARD, LOSS_REWARD]);
+        tree.propagate_reward(path, REWARD);
 
         for path_i in 1..=check_path.len() {
             // This isn't the greatest way to do this - maybe we should be just looking it up in a
             // table.
             let semi_path = check_path[0..path_i].to_vec();
-            let player_id = (path_i + 1) % 2;
             let node = tree.root.get_node_by_path(semi_path);
-            if player_id == 0 {
-                assert_eq!(node.value_sum(), REWARD);
-                assert_eq!(node.visit_count(), 1);
-            } else {
-                assert_eq!(node.value_sum(), LOSS_REWARD);
-                assert_eq!(node.visit_count(), 1);
-            }
+            assert_eq!(node.value_sum(), REWARD);
+            assert_eq!(node.visit_count(), 1);
         }
     }
 }

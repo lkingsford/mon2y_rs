@@ -1,10 +1,9 @@
 use super::game::{Action, State};
 use core::panic;
-use log::warn;
+use log::{debug, trace, warn};
 use rand::Rng;
 use std::collections::HashMap;
 
-const MIN_CHILD_VISIT: f64 = 0.00000000001;
 #[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
     Expanded {
@@ -75,25 +74,42 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         Self::new_expanded(state)
     }
     pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
+        // also fix fror other player rewards
         match self {
             Node::Expanded { children, .. } => {
                 let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
-                    .map(|(action, child_node)| {
-                        // UCB formula
-                        let q: f64 =
-                            child_node.value_sum() / (1.0 + child_node.visit_count() as f64);
-                        let u: f64 = (f64::max(MIN_CHILD_VISIT, self.visit_count() as f64)
-                            / (f64::max(MIN_CHILD_VISIT, child_node.visit_count() as f64)))
-                        .ln()
-                        .sqrt();
+                    .filter_map(|(action, child_node)| {
+                        if child_node.fully_explored() {
+                            return None;
+                        }
+                        let visit_count = child_node.visit_count() as f64;
+                        let parent_visits = self.visit_count() as f64;
+                        if visit_count == 0.0 {
+                            return Some((action.clone(), f64::INFINITY));
+                        }
+                        let q: f64 = child_node.value_sum() / visit_count;
+                        let u: f64 = (parent_visits.ln() / visit_count).sqrt();
                         // Random used to break ties
                         // Todo: Cache the rng
                         let r: f64 = rand::thread_rng().gen::<f64>() * 1e-6;
-                        (action.clone(), q + constant * u + r)
+                        let ucb: f64 = (q + constant * u + r);
+                        trace!(
+                            "UCB action: {:?}, value_sum: {}, visit_count: {}, parent_visits: {}, q: {}, u: {}, c: {} ucb: {}",
+                            action,
+                            child_node.value_sum(),
+                            child_node.visit_count(),
+                            parent_visits,
+                            q,
+                            u,
+                            constant,
+                            ucb
+                        );
+                        Some((action.clone(), ucb))
                     })
                     .collect();
                 ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
                 ucbs.iter().map(|(action, _)| action.clone()).collect()
             }
             Node::Placeholder => Vec::new(),
@@ -141,6 +157,38 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             node = node.get_child(action);
         }
         node
+    }
+
+    pub fn trace_log_children(&self, level: usize) {
+        match self {
+            Node::Expanded { children, .. } => {
+                for (action, child) in children.iter() {
+                    match child {
+                        Node::Expanded { .. } => {
+                            let action_name = format!("{:?}", action);
+                            trace!("{} {}", "         |-".repeat(level), action_name);
+                            trace!(
+                                "{} {:.6} {}",
+                                "         | ".repeat(level),
+                                child.value_sum(),
+                                child.visit_count()
+                            );
+                            trace!(
+                                "{} {:.6}",
+                                "         | ".repeat(level),
+                                child.value_sum() / (child.visit_count() as f64)
+                            );
+                            child.trace_log_children(level + 1);
+                        }
+                        Node::Placeholder => {
+                            let action_name = format!("({:?})", action);
+                            trace!("{} {}", "         |-".repeat(level), action_name);
+                        }
+                    }
+                }
+            }
+            Node::Placeholder => return,
+        }
     }
 }
 

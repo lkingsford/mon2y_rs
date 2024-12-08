@@ -3,10 +3,10 @@ use std::io;
 use crate::game::Game;
 use crate::mon2y::game::{Action, Actor, State};
 
-const BOARD_WIDTH: usize = 7;
-const BOARD_HEIGHT: usize = 6;
+pub const BOARD_WIDTH: usize = 7;
+pub const BOARD_HEIGHT: usize = 6;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum C4Action {
     Drop(u8),
 }
@@ -26,8 +26,8 @@ impl Action for C4Action {
                 }
                 let winner = check_for_win(&new_board);
                 let (terminal, reward) = match winner {
-                    CheckForWinResult::Winner(0) => (true, [0.0 as f64, 1.0 as f64].to_vec()),
-                    CheckForWinResult::Winner(1) => (true, [1.0 as f64, 0.0 as f64].to_vec()),
+                    CheckForWinResult::Winner(0) => (true, [1.0 as f64, -1.0 as f64].to_vec()),
+                    CheckForWinResult::Winner(1) => (true, [-1.0 as f64, 1.0 as f64].to_vec()),
                     CheckForWinResult::Stalemate => (true, [-0.5 as f64, -0.5 as f64].to_vec()),
                     CheckForWinResult::Ongoing => (false, [0.0 as f64, 0.0 as f64].to_vec()),
                     _ => panic!("Unexpected check_for_win result"),
@@ -162,7 +162,7 @@ pub struct C4;
 impl Game for C4 {
     type StateType = C4State;
     type ActionType = C4Action;
-    fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
+    fn visualise_state(&self, state: &Self::StateType) {
         for x in 0..BOARD_WIDTH {
             print!("{}", x);
         }
@@ -181,6 +181,8 @@ impl Game for C4 {
             }
             print!("\n");
         }
+    }
+    fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)

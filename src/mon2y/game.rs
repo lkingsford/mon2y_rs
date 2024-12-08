@@ -1,5 +1,6 @@
 use super::Reward;
-pub trait Action: Clone + Copy + Eq + std::hash::Hash {
+use std::fmt::Debug;
+pub trait Action: Debug + Clone + Copy + Eq + std::hash::Hash {
     type StateType: State<ActionType = Self>;
     fn execute(&self, state: &Self::StateType) -> Self::StateType;
 }
