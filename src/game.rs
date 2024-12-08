@@ -1,4 +1,4 @@
-use crate::mon2y::{Action, State};
+use crate::mon2y::game::{Action, State};
 pub trait Game {
     type StateType: State<ActionType = Self::ActionType>;
     type ActionType: Action<StateType = Self::StateType>;

@@ -6,7 +6,7 @@ mod mon2y;
 use c4::C4;
 use clap::{Parser, ValueEnum};
 use game::Game;
-use mon2y::{Action, Actor, State};
+use mon2y::game::{Action, Actor, State};
 use rand::Rng;
 
 #[derive(Debug, Clone, ValueEnum)]

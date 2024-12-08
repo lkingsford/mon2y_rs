@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::game::Game;
-use crate::mon2y::{Action, Actor, State};
+use crate::mon2y::game::{Action, Actor, State};
 
 const BOARD_WIDTH: usize = 7;
 const BOARD_HEIGHT: usize = 6;
