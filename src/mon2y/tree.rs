@@ -441,7 +441,7 @@ mod tests {
         ];
         let check_path = path.clone();
         const REWARD: f64 = 0.8;
-        tree.propagate_reward(path, REWARD);
+        tree.propagate_reward(path, vec![REWARD]);
 
         for path_i in 1..=check_path.len() {
             let semi_path = check_path[0..path_i].to_vec();
@@ -488,15 +488,22 @@ mod tests {
         let check_path = path.clone();
         // Using slightly unusual rewards to just make more certain that it was actually this reward
         const REWARD: f64 = 0.8;
-        tree.propagate_reward(path, REWARD);
+        const LOSS_REWARD: f64 = -0.6;
+        tree.propagate_reward(path, vec![REWARD, LOSS_REWARD]);
 
         for path_i in 1..=check_path.len() {
             // This isn't the greatest way to do this - maybe we should be just looking it up in a
             // table.
             let semi_path = check_path[0..path_i].to_vec();
+            let player_id = (path_i + 1) % 2;
             let node = tree.root.get_node_by_path(semi_path);
-            assert_eq!(node.value_sum(), REWARD);
-            assert_eq!(node.visit_count(), 1);
+            if player_id == 0 {
+                assert_eq!(node.value_sum(), REWARD);
+                assert_eq!(node.visit_count(), 1);
+            } else {
+                assert_eq!(node.value_sum(), LOSS_REWARD);
+                assert_eq!(node.visit_count(), 1);
+            }
         }
     }
 }

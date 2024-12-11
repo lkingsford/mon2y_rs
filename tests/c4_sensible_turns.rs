@@ -18,7 +18,7 @@ fn test_c4_one_action_blocks_win() {
     ] {
         c4_state = action.execute(&c4_state);
     }
-    let action = calculate_best_turn(1, 100, c4_state, BestTurnPolicy::MostVisits);
+    let action = calculate_best_turn(100, c4_state, BestTurnPolicy::MostVisits);
     assert_eq!(action, c4::C4Action::Drop(0));
 }
 
@@ -35,7 +35,7 @@ fn test_c4_one_action_gets_win() {
     ] {
         c4_state = action.execute(&c4_state);
     }
-    let action = calculate_best_turn(0, 100, c4_state, BestTurnPolicy::MostVisits);
+    let action = calculate_best_turn(100, c4_state, BestTurnPolicy::MostVisits);
     assert_eq!(action, c4::C4Action::Drop(3));
 }
 
@@ -74,8 +74,7 @@ fn test_c4_plays_through_without_crash() {
     let mut c4_state = C4.init_game();
     while !c4_state.terminal() {
         if let mon2y_rs::mon2y::game::Actor::Player(player) = c4_state.next_actor() {
-            let action =
-                calculate_best_turn(player, 100, c4_state.clone(), BestTurnPolicy::MostVisits);
+            let action = calculate_best_turn(100, c4_state.clone(), BestTurnPolicy::MostVisits);
             c4_state = action.execute(&c4_state);
         }
     }
