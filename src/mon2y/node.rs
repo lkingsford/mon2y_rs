@@ -12,6 +12,7 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         visit_count: u32,
         /// Sum of rewards for this player
         value_sum: f64,
+        cached_ucb: Option<f64>,
     },
     Placeholder,
 }
@@ -51,14 +52,49 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             Node::Expanded {
                 visit_count,
                 value_sum,
+                cached_ucb,
                 ..
             } => {
                 *visit_count += 1;
                 *value_sum += reward as f64;
+                self.invalidate_cached_ucb(true);
             }
             Node::Placeholder => {
                 warn!("Visiting placeholder node");
             }
+        }
+    }
+
+    pub fn invalidate_cached_ucb(&mut self, recurse: bool) {
+        match self {
+            Node::Expanded {
+                cached_ucb,
+                children,
+                ..
+            } => {
+                *cached_ucb = None;
+                for child in children.values_mut() {
+                    // Only need to invalidate the first level of child: 'parent visits' is part of ucb
+                    child.invalidate_cached_ucb(false);
+                }
+            }
+            Node::Placeholder => {}
+        }
+    }
+
+    pub fn cache_ucb(&mut self, ucb: f64) {
+        match self {
+            Node::Expanded { cached_ucb, .. } => {
+                *cached_ucb = Some(ucb);
+            }
+            Node::Placeholder => {}
+        }
+    }
+
+    pub fn cached_ucb(&self) -> Option<f64> {
+        match self {
+            Node::Expanded { cached_ucb, .. } => *cached_ucb,
+            Node::Placeholder => None,
         }
     }
 
@@ -82,6 +118,10 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     .filter_map(|(action, child_node)| {
                         if child_node.fully_explored() {
                             return None;
+                        }
+                        let cached_ucb = child_node.cached_ucb();
+                        if let Some(ucb) = cached_ucb {
+                            return Some((action.clone(), ucb));
                         }
                         let visit_count = child_node.visit_count() as f64;
                         let parent_visits = self.visit_count() as f64;
@@ -108,6 +148,10 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                         Some((action.clone(), ucb))
                     })
                     .collect();
+                for (action, ucb) in ucbs.iter_mut() {
+                    let mut node = children.get_mut(action).unwrap();
+                    node.cache_ucb(*ucb);
+                }
                 ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
                 ucbs.iter().map(|(action, _)| action.clone()).collect()
@@ -209,5 +253,6 @@ where
         children,
         visit_count: 0,
         value_sum: 0.0,
+        cached_ucb: None,
     }
 }
