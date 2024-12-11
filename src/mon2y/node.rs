@@ -2,7 +2,7 @@ use super::game::{Action, State};
 use core::panic;
 use log::{debug, trace, warn};
 use rand::Rng;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::RwLock};
 
 #[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
@@ -12,7 +12,7 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         visit_count: u32,
         /// Sum of rewards for this player
         value_sum: f64,
-        cached_ucb: Option<f64>,
+        cached_ucb: RwLock<Option<f64>>,
     },
     Placeholder,
 }
@@ -65,27 +65,31 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn invalidate_cached_ucb(&mut self, recurse: bool) {
+    pub fn invalidate_cached_ucb(&self, recurse: bool) {
         match self {
             Node::Expanded {
                 cached_ucb,
                 children,
                 ..
             } => {
-                *cached_ucb = None;
-                for child in children.values_mut() {
-                    // Only need to invalidate the first level of child: 'parent visits' is part of ucb
-                    child.invalidate_cached_ucb(false);
+                let mut cached_ucb_ref = cached_ucb.write().unwrap();
+                *cached_ucb_ref = None;
+                if !recurse {
+                    for child in children.values() {
+                        // Only need to invalidate the first level of child: 'parent visits' is part of ucb
+                        child.invalidate_cached_ucb(false);
+                    }
                 }
             }
             Node::Placeholder => {}
         }
     }
 
-    pub fn cache_ucb(&mut self, ucb: f64) {
+    pub fn cache_ucb(&self, ucb: f64) {
         match self {
             Node::Expanded { cached_ucb, .. } => {
-                *cached_ucb = Some(ucb);
+                let mut cached_ucb_ref = cached_ucb.write().unwrap();
+                *cached_ucb_ref = Some(ucb);
             }
             Node::Placeholder => {}
         }
@@ -93,7 +97,10 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
 
     pub fn cached_ucb(&self) -> Option<f64> {
         match self {
-            Node::Expanded { cached_ucb, .. } => *cached_ucb,
+            Node::Expanded { cached_ucb, .. } => {
+                let ucb = cached_ucb.read().unwrap();
+                *ucb
+            }
             Node::Placeholder => None,
         }
     }
@@ -149,7 +156,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     })
                     .collect();
                 for (action, ucb) in ucbs.iter_mut() {
-                    let mut node = children.get_mut(action).unwrap();
+                    let node = children.get(action).unwrap();
                     node.cache_ucb(*ucb);
                 }
                 ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -253,6 +260,6 @@ where
         children,
         visit_count: 0,
         value_sum: 0.0,
-        cached_ucb: None,
+        cached_ucb: RwLock::new(None),
     }
 }
