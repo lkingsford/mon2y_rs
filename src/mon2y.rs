@@ -9,5 +9,4 @@ pub type Reward = f64;
 #[derive(Debug, Clone)]
 pub enum BestTurnPolicy {
     MostVisits,
-    UCB,
 }

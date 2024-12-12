@@ -165,13 +165,6 @@ where
                     panic!("Expected root to be an expanded node")
                 }
             }
-            BestTurnPolicy::UCB => {
-                if let Node::Expanded { .. } = &self.root {
-                    self.root.best_pick(0.0)[0].clone()
-                } else {
-                    panic!("Expected root to be an expanded node")
-                }
-            }
         }
     }
 }
