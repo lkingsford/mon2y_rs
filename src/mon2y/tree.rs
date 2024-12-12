@@ -155,6 +155,39 @@ where
                             ))
                             .collect::<Vec<_>>()
                     );
+                    // Short circuit on a winning move
+                    // Implemented because (I think) the UCB formula doesn't end up prioritizing
+                    // certainly winning moves, because they're already explored. Dunno if this
+                    // is a cludge though.
+                    let winning_moves: Vec<ActionType> = children
+                        .iter()
+                        .filter_map(|(action, node)| {
+                            if node.state().terminal() {
+                                let actor = self.root.state().next_actor();
+                                if let Actor::Player(player_id) = actor {
+                                    if let Some((index, _)) =
+                                        // Annoying - but necessary because I was dumb enough to use f64
+                                        // (otherwise, it'd be max_by_key)
+                                        node.state().reward().iter().enumerate().max_by(
+                                                |(_, a), (_, b)| {
+                                                    a.partial_cmp(b)
+                                                        .unwrap_or(std::cmp::Ordering::Less)
+                                                },
+                                            )
+                                    {
+                                        if index == player_id as usize {
+                                            return Some(action.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            None
+                        })
+                        .collect();
+                    if let Some(action) = winning_moves.first() {
+                        return action.clone();
+                    }
+
                     children
                         .iter()
                         .max_by_key(|(_, node)| node.visit_count())

@@ -10,6 +10,7 @@ pub trait Action: Debug + Clone + Copy + Eq + std::hash::Hash {
 /// A player is just an identifier, typically a number between 0 and n-1.
 ///
 /// A game action is a action that the game takes, rather than a player.
+#[derive(Debug)]
 pub enum Actor<ActionType> {
     /// A player is just an identifier, typically a number between 0 and n-1.
     Player(u8),
