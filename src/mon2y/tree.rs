@@ -87,32 +87,22 @@ where
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
                 {
-                    let node = cur_node.read().unwrap();
-                    let mut placeholder = false;
-                    if let Node::Expanded { .. } = &*node {
-                        let child_node = node.get_child(action.clone()).clone();
-
-                        {
-                            let read_node = child_node.read().unwrap();
-                            placeholder = matches!(&*read_node, Node::Placeholder);
+                    let child_node = {
+                        let node = cur_node.read().unwrap();
+                        if let Node::Expanded { .. } = &*node {
+                            node.get_child(action.clone()).clone()
+                        } else {
+                            continue;
                         }
+                    };
 
-                        if placeholder {
-                            {
-                                let mut write_node = child_node.write().unwrap();
-                                let cur_state = write_node.state();
-                                let expanded_child = write_node.expansion(*action, &cur_state);
-                                write_node.insert_child(action.clone(), expanded_child);
-                            }
-                        }
+                    {
+                        let mut write_node = child_node.write().unwrap();
+                        let cur_state = write_node.state();
+                        let expanded_child = write_node.expansion(*action, &cur_state);
+                        write_node.insert_child(action.clone(), expanded_child);
                     }
-                }
-
-                // Move to the child node after the borrow ends
-                if let Node::Expanded { children, .. } = cur_node {
-                    cur_node = children.get_mut(action).expect("Child must exist");
-                } else {
-                    panic!("Expected an Expanded node");
+                    cur_node = child_node;
                 }
             }
         }
