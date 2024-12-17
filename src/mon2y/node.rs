@@ -2,13 +2,16 @@ use super::game::{Action, State};
 use core::panic;
 use log::{debug, trace, warn};
 use rand::Rng;
-use std::{collections::HashMap, sync::RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
     Expanded {
         state: StateType,
-        children: HashMap<ActionType, Node<StateType, ActionType>>,
+        children: HashMap<ActionType, Arc<RwLock<Node<StateType, ActionType>>>>,
         visit_count: u32,
         /// Sum of rewards for this player
         value_sum: f64,

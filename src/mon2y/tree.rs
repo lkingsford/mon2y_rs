@@ -5,6 +5,7 @@ use super::Reward;
 use core::panic;
 use log::{debug, trace};
 use rand::Rng;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, PartialEq)]
 pub enum Selection<ActionType: Action> {
@@ -13,7 +14,7 @@ pub enum Selection<ActionType: Action> {
 }
 
 pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
-    pub root: Node<StateType, ActionType>,
+    pub root: Arc<RwLock<Node<StateType, ActionType>>>,
     constant: f64,
 }
 
@@ -23,9 +24,14 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
+    fn node_ref(root: Node<StateType, ActionType>) -> Arc<RwLock<Node<StateType, ActionType>>> {
+        // Only doing this to keep it a little tidier
+        Arc::new(RwLock::new(root))
+    }
+
     pub fn new(root: Node<StateType, ActionType>) -> Tree<StateType, ActionType> {
         Tree {
-            root,
+            root: Tree::node_ref(root),
             constant: 2.0_f64.sqrt(),
         }
     }
@@ -34,20 +40,43 @@ where
     /// Returns a path to the current selection
     ///
     pub fn selection(&self) -> Selection<ActionType> {
-        if self.root.fully_explored() {
-            return Selection::FullyExplored;
+        {
+            let root = self.root.read().unwrap();
+            if root.fully_explored() {
+                return Selection::FullyExplored;
+            }
+            if let Node::Placeholder = *root {
+                return Selection::Selection(vec![]);
+            }
         }
-        if let Node::Placeholder = self.root {
-            return Selection::Selection(vec![]);
-        }
-        let mut current_selection = &self.root;
+
+        let mut current_selection = self.root.clone();
         let mut result: Vec<ActionType> = vec![];
-        while let Node::Expanded { children, .. } = current_selection {
-            let best_picks = current_selection.best_pick(self.constant);
-            let best_pick = best_picks[0].clone();
+
+        loop {
+            let best_pick = {
+                let node = current_selection.read().unwrap();
+                if let Node::Expanded { .. } = &*node {
+                    let best_picks = node.best_pick(self.constant);
+                    best_picks[0].clone()
+                } else {
+                    break;
+                }
+            };
+            // I don't like the borrow checker right now
+            let next_node = {
+                let node = current_selection.read().unwrap();
+                if let Node::Expanded { children, .. } = &*node {
+                    children.get(&best_pick).unwrap().clone()
+                } else {
+                    break;
+                }
+            };
+
             result.push(best_pick);
-            current_selection = children.get(&best_pick).unwrap();
+            current_selection = next_node;
         }
+
         Selection::Selection(result)
     }
 
