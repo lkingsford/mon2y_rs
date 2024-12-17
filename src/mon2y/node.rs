@@ -185,17 +185,9 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn get_child_mut(&mut self, action: ActionType) -> &mut Node<StateType, ActionType> {
+    pub fn get_child(&self, action: ActionType) -> Arc<RwLock<Node<StateType, ActionType>>> {
         if let Node::Expanded { children, .. } = self {
-            children.get_mut(&action).unwrap()
-        } else {
-            panic!("Getting child from placeholder");
-        }
-    }
-
-    pub fn get_child<'a>(&'a self, action: ActionType) -> &Node<StateType, ActionType> {
-        if let Node::Expanded { children, .. } = self {
-            children.get(&action).unwrap()
+            children.get(&action).unwrap().clone()
         } else {
             panic!("Getting child from placeholder");
         }
@@ -203,14 +195,6 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
 
     pub fn new_expanded(state: StateType) -> Node<StateType, <StateType as State>::ActionType> {
         create_expanded_node(state)
-    }
-
-    pub fn get_node_by_path(&self, path: Vec<ActionType>) -> &Node<StateType, ActionType> {
-        let mut node = self;
-        for action in path {
-            node = node.get_child(action);
-        }
-        node
     }
 
     pub fn trace_log_children(&self, level: usize) {

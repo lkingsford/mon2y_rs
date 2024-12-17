@@ -80,20 +80,31 @@ where
         Selection::Selection(result)
     }
 
-    pub fn expansion(&mut self, selection: &Selection<ActionType>) {
-        let mut cur_node = &mut self.root;
+    pub fn expansion(&self, selection: &Selection<ActionType>) {
         trace!("Expansion: Selection: {:#?}", selection);
+        let mut cur_node = self.root.clone();
 
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
-                let cur_node_state = &cur_node.state();
+                {
+                    let node = cur_node.read().unwrap();
+                    let mut placeholder = false;
+                    if let Node::Expanded { .. } = &*node {
+                        let child_node = node.get_child(action.clone()).clone();
 
-                if let Node::Expanded { .. } = cur_node {
-                    let child_node = cur_node.get_child(action.clone());
+                        {
+                            let read_node = child_node.read().unwrap();
+                            placeholder = matches!(&*read_node, Node::Placeholder);
+                        }
 
-                    if let Node::Placeholder = child_node {
-                        let expanded_child = child_node.expansion(*action, &cur_node_state);
-                        cur_node.insert_child(action.clone(), expanded_child);
+                        if placeholder {
+                            {
+                                let mut write_node = child_node.write().unwrap();
+                                let cur_state = write_node.state();
+                                let expanded_child = write_node.expansion(*action, &cur_state);
+                                write_node.insert_child(action.clone(), expanded_child);
+                            }
+                        }
                     }
                 }
 
