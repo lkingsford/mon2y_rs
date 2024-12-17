@@ -2,13 +2,16 @@ use super::game::{Action, State};
 use core::panic;
 use log::{debug, trace, warn};
 use rand::Rng;
-use std::{collections::HashMap, sync::RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
     Expanded {
         state: StateType,
-        children: HashMap<ActionType, Node<StateType, ActionType>>,
+        children: HashMap<ActionType, Arc<RwLock<Node<StateType, ActionType>>>>,
         visit_count: u32,
         /// Sum of rewards for this player
         value_sum: f64,
@@ -20,13 +23,16 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
 impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType, ActionType> {
     pub fn fully_explored(&self) -> bool {
         match self {
-            Node::Expanded {
-                state, children, ..
-            } => {
+            Node::Expanded { children, .. } => {
                 children.is_empty()
-                    || children.iter().all(|(_, child)| match child {
-                        Node::Expanded { .. } => child.fully_explored(),
-                        Node::Placeholder => false,
+                    || children.iter().all(|(_, child)| {
+                        let child = child.clone();
+                        // todo: can we avoid keeping this read lock through the whole fully-explored check?
+                        let child_node = child.read().unwrap();
+                        match *child_node {
+                            Node::Expanded { .. } => child_node.fully_explored(),
+                            Node::Placeholder => false,
+                        }
                     })
             }
             Node::Placeholder => false,
@@ -52,12 +58,11 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             Node::Expanded {
                 visit_count,
                 value_sum,
-                cached_ucb,
                 ..
             } => {
                 *visit_count += 1;
                 *value_sum += reward as f64;
-                self.invalidate_cached_ucb(true);
+                self.invalidate_cached_ucb();
             }
             Node::Placeholder => {
                 warn!("Visiting placeholder node");
@@ -65,7 +70,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn invalidate_cached_ucb(&self, recurse: bool) {
+    pub fn invalidate_cached_ucb(&self) {
         match self {
             Node::Expanded {
                 cached_ucb,
@@ -74,10 +79,16 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             } => {
                 let mut cached_ucb_ref = cached_ucb.write().unwrap();
                 *cached_ucb_ref = None;
-                if !recurse {
-                    for child in children.values() {
-                        // Only need to invalidate the first level of child: 'parent visits' is part of ucb
-                        child.invalidate_cached_ucb(false);
+                for child in children.values() {
+                    // Only need to invalidate the first level of child: 'parent visits' is part of ucb
+                    let child = child.clone();
+                    let child_node = child.write().unwrap();
+                    match &*child_node {
+                        Node::Expanded { cached_ucb, .. } => {
+                            let mut cached_ucb_ref = cached_ucb.write().unwrap();
+                            *cached_ucb_ref = None;
+                        }
+                        Node::Placeholder => {}
                     }
                 }
             }
@@ -117,12 +128,13 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         Self::new_expanded(state)
     }
     pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
-        // also fix fror other player rewards
         match self {
             Node::Expanded { children, .. } => {
                 let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
                     .filter_map(|(action, child_node)| {
+                        let child_ref = child_node.clone();
+                        let child_node = child_ref.read().unwrap();
                         if child_node.fully_explored() {
                             return None;
                         }
@@ -157,7 +169,8 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     .collect();
                 for (action, ucb) in ucbs.iter_mut() {
                     let node = children.get(action).unwrap();
-                    node.cache_ucb(*ucb);
+                    let read_node = node.read().unwrap();
+                    read_node.cache_ucb(*ucb);
                 }
                 ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
@@ -176,23 +189,15 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
 
     pub fn insert_child(&mut self, action: ActionType, child: Node<StateType, ActionType>) {
         if let Node::Expanded { children, .. } = self {
-            children.insert(action, child);
+            children.insert(action, Arc::new(RwLock::new(child)));
         } else {
             panic!("Inserting child into placeholder");
         }
     }
 
-    pub fn get_child_mut(&mut self, action: ActionType) -> &mut Node<StateType, ActionType> {
+    pub fn get_child(&self, action: ActionType) -> Arc<RwLock<Node<StateType, ActionType>>> {
         if let Node::Expanded { children, .. } = self {
-            children.get_mut(&action).unwrap()
-        } else {
-            panic!("Getting child from placeholder");
-        }
-    }
-
-    pub fn get_child<'a>(&'a self, action: ActionType) -> &Node<StateType, ActionType> {
-        if let Node::Expanded { children, .. } = self {
-            children.get(&action).unwrap()
+            children.get(&action).unwrap().clone()
         } else {
             panic!("Getting child from placeholder");
         }
@@ -202,34 +207,46 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         create_expanded_node(state)
     }
 
-    pub fn get_node_by_path(&self, path: Vec<ActionType>) -> &Node<StateType, ActionType> {
-        let mut node = self;
-        for action in path {
-            node = node.get_child(action);
+    pub fn get_node_by_path(
+        &self,
+        path: Vec<ActionType>,
+    ) -> Arc<RwLock<Node<StateType, ActionType>>> {
+        if path.is_empty() {
+            panic!("Can't return empty path")
         }
-        node
+        let mut node = None;
+        for action in path {
+            if node.is_none() {
+                node = Some(self.get_child(action));
+            } else {
+                node = Some(node.unwrap().read().unwrap().get_child(action).clone());
+            }
+        }
+        node.unwrap()
     }
 
     pub fn trace_log_children(&self, level: usize) {
         match self {
             Node::Expanded { children, .. } => {
                 for (action, child) in children.iter() {
-                    match child {
+                    let cloned_child = child.clone();
+                    let child_node = cloned_child.read().unwrap();
+                    match *child_node {
                         Node::Expanded { .. } => {
                             let action_name = format!("{:?}", action);
                             trace!("{} {}", "         |-".repeat(level), action_name);
                             trace!(
                                 "{} {:.6} {}",
                                 "         | ".repeat(level),
-                                child.value_sum(),
-                                child.visit_count()
+                                child_node.value_sum(),
+                                child_node.visit_count()
                             );
                             trace!(
                                 "{} {:.6}",
                                 "         | ".repeat(level),
-                                child.value_sum() / (child.visit_count() as f64)
+                                child_node.value_sum() / (child_node.visit_count() as f64)
                             );
-                            child.trace_log_children(level + 1);
+                            child_node.trace_log_children(level + 1);
                         }
                         Node::Placeholder => {
                             let action_name = format!("({:?})", action);
@@ -251,9 +268,12 @@ where
     // (I think the Node::new_expanded should be able to work? But my rust brain
     // is still learning and couldn't figure out syntax that the type checker
     // was happy with)
-    let mut children = HashMap::new();
+    let mut children: HashMap<
+        StateType::ActionType,
+        Arc<RwLock<Node<StateType, StateType::ActionType>>>,
+    > = HashMap::new();
     for action in state.permitted_actions() {
-        children.insert(action, Node::Placeholder);
+        children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
     }
     Node::Expanded {
         state,

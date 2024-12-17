@@ -58,7 +58,9 @@ fn test_c4_play_out_repeated() {
     let mut p0_wins = 0.0;
     let mut p1_wins = 0.0;
     for _ in 0..1000 {
-        let result = tree.play_out(vec![]);
+        let root_ref = tree.root.clone();
+        let root = root_ref.read().unwrap();
+        let result = tree.play_out(root.state().clone());
         if result[0] > 0.0 {
             p0_wins += 1.0;
         };

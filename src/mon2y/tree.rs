@@ -5,6 +5,7 @@ use super::Reward;
 use core::panic;
 use log::{debug, trace};
 use rand::Rng;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, PartialEq)]
 pub enum Selection<ActionType: Action> {
@@ -13,7 +14,7 @@ pub enum Selection<ActionType: Action> {
 }
 
 pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
-    pub root: Node<StateType, ActionType>,
+    pub root: Arc<RwLock<Node<StateType, ActionType>>>,
     constant: f64,
 }
 
@@ -23,9 +24,14 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
+    fn node_ref(root: Node<StateType, ActionType>) -> Arc<RwLock<Node<StateType, ActionType>>> {
+        // Only doing this to keep it a little tidier
+        Arc::new(RwLock::new(root))
+    }
+
     pub fn new(root: Node<StateType, ActionType>) -> Tree<StateType, ActionType> {
         Tree {
-            root,
+            root: Tree::node_ref(root),
             constant: 2.0_f64.sqrt(),
         }
     }
@@ -34,82 +40,126 @@ where
     /// Returns a path to the current selection
     ///
     pub fn selection(&self) -> Selection<ActionType> {
-        if self.root.fully_explored() {
-            return Selection::FullyExplored;
+        {
+            let root = self.root.read().unwrap();
+            if root.fully_explored() {
+                return Selection::FullyExplored;
+            }
+            if let Node::Placeholder = *root {
+                return Selection::Selection(vec![]);
+            }
         }
-        if let Node::Placeholder = self.root {
-            return Selection::Selection(vec![]);
-        }
-        let mut current_selection = &self.root;
+
+        let mut current_selection = self.root.clone();
         let mut result: Vec<ActionType> = vec![];
-        while let Node::Expanded { children, .. } = current_selection {
-            let best_picks = current_selection.best_pick(self.constant);
-            let best_pick = best_picks[0].clone();
+
+        loop {
+            let best_pick = {
+                let node = current_selection.read().unwrap();
+                if let Node::Expanded { .. } = &*node {
+                    let best_picks = node.best_pick(self.constant);
+                    best_picks[0].clone()
+                } else {
+                    break;
+                }
+            };
+            // I don't like the borrow checker right now
+            let next_node = {
+                let node = current_selection.read().unwrap();
+                if let Node::Expanded { children, .. } = &*node {
+                    children.get(&best_pick).unwrap().clone()
+                } else {
+                    break;
+                }
+            };
+
             result.push(best_pick);
-            current_selection = children.get(&best_pick).unwrap();
+            current_selection = next_node;
         }
+
         Selection::Selection(result)
     }
 
-    pub fn expansion(&mut self, selection: &Selection<ActionType>) {
-        let mut cur_node = &mut self.root;
+    pub fn expansion(
+        &self,
+        selection: &Selection<ActionType>,
+    ) -> Vec<Arc<RwLock<Node<StateType, ActionType>>>> {
         trace!("Expansion: Selection: {:#?}", selection);
+        let mut cur_node = self.root.clone();
+        // This root is needed as part of the output to ensure that propagate can work
+        // It was either here or selection. Could fit in either place.
+        // Could also be in iterate, but that was going to result in more memory allocations.
+        let mut result: Vec<Arc<RwLock<Node<StateType, ActionType>>>> = vec![self.root.clone()];
 
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
-                let cur_node_state = &cur_node.state();
+                {
+                    let child_node = {
+                        let node = cur_node.read().unwrap();
+                        if let Node::Expanded { .. } = &*node {
+                            node.get_child(action.clone()).clone()
+                        } else {
+                            continue;
+                        }
+                    };
 
-                if let Node::Expanded { .. } = cur_node {
-                    let child_node = cur_node.get_child(action.clone());
-
-                    if let Node::Placeholder = child_node {
-                        let expanded_child = child_node.expansion(*action, &cur_node_state);
-                        cur_node.insert_child(action.clone(), expanded_child);
+                    {
+                        let mut write_node = child_node.write().unwrap();
+                        let mut cur_node_write = cur_node.write().unwrap();
+                        if let Node::Placeholder { .. } = &*write_node {
+                            let cur_state = cur_node_write.state();
+                            let expanded_child = write_node.expansion(*action, &cur_state);
+                            cur_node_write.insert_child(action.clone(), expanded_child);
+                        }
                     }
-                }
-
-                // Move to the child node after the borrow ends
-                if let Node::Expanded { children, .. } = cur_node {
-                    cur_node = children.get_mut(action).expect("Child must exist");
-                } else {
-                    panic!("Expected an Expanded node");
+                    result.push(cur_node);
+                    cur_node = child_node;
                 }
             }
         }
+        result
     }
 
-    pub fn play_out(&self, selection_path: Vec<ActionType>) -> Vec<Reward> {
-        let node = self.root.get_node_by_path(selection_path);
+    pub fn play_out(&self, state: StateType) -> Vec<Reward> {
         let mut rng = rand::thread_rng();
 
-        if let Node::Expanded { state, .. } = node {
-            let mut cur_state = Box::new(state.clone());
+        let mut cur_state = Box::new(state.clone());
 
-            while !cur_state.terminal() {
-                let permitted_actions = cur_state.permitted_actions();
+        while !cur_state.terminal() {
+            let permitted_actions = cur_state.permitted_actions();
 
-                let action: ActionType =
-                    permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
-                cur_state = Box::new(action.execute(&cur_state));
-            }
-            trace!("Reward is {:?}", cur_state.reward());
-            cur_state.reward()
-        } else {
-            panic!("Expected an expanded node");
+            let action: ActionType =
+                permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
+            cur_state = Box::new(action.execute(&cur_state));
         }
+        trace!("Reward is {:?}", cur_state.reward());
+        cur_state.reward()
     }
 
-    pub fn propagate_reward(&mut self, selection_path: Vec<ActionType>, reward: Vec<Reward>) {
-        let mut cur_node = &mut self.root;
-        // Reward doesn't matter for root
-        cur_node.visit(0.0);
-        for action in selection_path {
-            let actor = cur_node.state().next_actor();
-            cur_node = cur_node.get_child_mut(action);
-            cur_node.visit(match actor {
-                Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
-                _ => 0.0,
-            });
+    pub fn propagate_reward(
+        &mut self,
+        nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>>,
+        reward: Vec<Reward>,
+    ) {
+        let mut previous_node = nodes[0].clone();
+        for node in nodes[1..].iter() {
+            {
+                let actor = {
+                    let read_previous = previous_node.read().unwrap();
+                    if let Node::Expanded { .. } = &*read_previous {
+                        read_previous.state().next_actor()
+                    } else {
+                        panic!("Attempting to propagate to a placeholder node");
+                    }
+                };
+
+                let mut cur_node = node.write().unwrap();
+                cur_node.visit(match actor {
+                    Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
+                    _ => 0.0,
+                })
+            }
+            previous_node = node.clone();
         }
     }
 
@@ -118,18 +168,20 @@ where
         if let Selection::FullyExplored = selection {
             return;
         };
-        self.expansion(&selection);
-        if let Selection::Selection(selection_path) = selection {
-            let reward = self.play_out(selection_path.clone());
-            trace!("Before propagate");
-            if log::log_enabled!(log::Level::Trace) {
-                self.root.best_pick(self.constant);
-            }
-            self.propagate_reward(selection_path, reward);
-            trace!("After propagate");
-            if log::log_enabled!(log::Level::Trace) {
-                self.root.best_pick(self.constant);
-            }
+        let expanded_nodes = self.expansion(&selection);
+        if let Selection::Selection(..) = selection {
+            let reward = {
+                self.play_out(
+                    expanded_nodes
+                        .last()
+                        .unwrap()
+                        .read()
+                        .unwrap()
+                        .state()
+                        .clone(),
+                )
+            };
+            self.propagate_reward(expanded_nodes, reward);
         }
     }
 }
@@ -328,8 +380,10 @@ mod tests {
 
         let mut tree = Tree::new(root);
         tree.expansion(&selection);
-        let node = tree.root.get_node_by_path(selection_path);
-        if let Node::Expanded { children, .. } = node {
+        let node_path = tree.root.clone();
+        let node_ref = node_path.read().unwrap().get_node_by_path(selection_path);
+        let node = node_ref.read().unwrap();
+        if let Node::Expanded { children, .. } = &*node {
             assert_eq!(children.len(), 5);
         } else {
             self::panic!("Node is not expanded");
@@ -348,17 +402,8 @@ mod tests {
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
         let mut root = create_expanded_node(root_state);
-
-        let mut explored_node = create_expanded_node(explored_state);
-        explored_node.visit(0.0f64);
-
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
-        root.insert_child(TestGameAction::WinInXTurns(3), Node::Placeholder);
-        root.visit(0.0f64);
         let tree = Tree::new(root);
-
-        let selection_path = vec![TestGameAction::WinInXTurns(2)];
-        let reward = tree.play_out(selection_path);
+        let reward = tree.play_out(explored_state);
 
         assert_eq!(reward, vec![1.0]);
     }
@@ -397,13 +442,44 @@ mod tests {
             TestGameAction::WinInXTurns(1),
             TestGameAction::Win,
         ];
+        let owned_root = tree.root.clone();
+        // Todo: Think about ways to tidy this.
+        let nodes = vec![
+            tree.root.clone(),
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .clone(),
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .clone(),
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::Win)
+                .clone(),
+        ];
+
         let check_path = path.clone();
         const REWARD: f64 = 0.8;
-        tree.propagate_reward(path, vec![REWARD]);
+        tree.propagate_reward(nodes, vec![REWARD]);
 
         for path_i in 1..=check_path.len() {
             let semi_path = check_path[0..path_i].to_vec();
-            let node = tree.root.get_node_by_path(semi_path);
+            let node_ref = tree.root.read().unwrap().get_node_by_path(semi_path);
+            let node = node_ref.read().unwrap();
             assert_eq!(node.value_sum(), REWARD);
             assert_eq!(node.visit_count(), 1);
         }
@@ -443,18 +519,49 @@ mod tests {
             TestGameAction::WinInXTurns(1),
             TestGameAction::Win,
         ];
+        let owned_root = tree.root.clone();
+        // Not super pleased with this here either
+        let nodes = vec![
+            tree.root.clone(),
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .clone(),
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .clone(),
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::Win)
+                .clone(),
+        ];
+
         let check_path = path.clone();
         // Using slightly unusual rewards to just make more certain that it was actually this reward
         const REWARD: f64 = 0.8;
         const LOSS_REWARD: f64 = -0.6;
-        tree.propagate_reward(path, vec![REWARD, LOSS_REWARD]);
+        tree.propagate_reward(nodes, vec![REWARD, LOSS_REWARD]);
 
         for path_i in 1..=check_path.len() {
             // This isn't the greatest way to do this - maybe we should be just looking it up in a
             // table.
             let semi_path = check_path[0..path_i].to_vec();
             let player_id = (path_i + 1) % 2;
-            let node = tree.root.get_node_by_path(semi_path);
+            let node_ref = tree.root.read().unwrap().get_node_by_path(semi_path);
+            let node = node_ref.read().unwrap();
             if player_id == 0 {
                 assert_eq!(node.value_sum(), REWARD);
                 assert_eq!(node.visit_count(), 1);
