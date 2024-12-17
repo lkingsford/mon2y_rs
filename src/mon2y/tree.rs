@@ -80,7 +80,10 @@ where
         Selection::Selection(result)
     }
 
-    pub fn expansion(&self, selection: &Selection<ActionType>) {
+    pub fn expansion(
+        &self,
+        selection: &Selection<ActionType>,
+    ) -> Arc<RwLock<Node<StateType, ActionType>>> {
         trace!("Expansion: Selection: {:#?}", selection);
         let mut cur_node = self.root.clone();
 
@@ -106,27 +109,23 @@ where
                 }
             }
         }
+        cur_node
     }
 
-    pub fn play_out(&self, selection_path: Vec<ActionType>) -> Vec<Reward> {
-        let node = self.root.get_node_by_path(selection_path);
+    pub fn play_out(&self, state: StateType) -> Vec<Reward> {
         let mut rng = rand::thread_rng();
 
-        if let Node::Expanded { state, .. } = node {
-            let mut cur_state = Box::new(state.clone());
+        let mut cur_state = Box::new(state.clone());
 
-            while !cur_state.terminal() {
-                let permitted_actions = cur_state.permitted_actions();
+        while !cur_state.terminal() {
+            let permitted_actions = cur_state.permitted_actions();
 
-                let action: ActionType =
-                    permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
-                cur_state = Box::new(action.execute(&cur_state));
-            }
-            trace!("Reward is {:?}", cur_state.reward());
-            cur_state.reward()
-        } else {
-            panic!("Expected an expanded node");
+            let action: ActionType =
+                permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
+            cur_state = Box::new(action.execute(&cur_state));
         }
+        trace!("Reward is {:?}", cur_state.reward());
+        cur_state.reward()
     }
 
     pub fn propagate_reward(&mut self, selection_path: Vec<ActionType>, reward: Vec<Reward>) {
@@ -148,18 +147,10 @@ where
         if let Selection::FullyExplored = selection {
             return;
         };
-        self.expansion(&selection);
+        let expanded_node = self.expansion(&selection);
         if let Selection::Selection(selection_path) = selection {
-            let reward = self.play_out(selection_path.clone());
-            trace!("Before propagate");
-            if log::log_enabled!(log::Level::Trace) {
-                self.root.best_pick(self.constant);
-            }
+            let reward = self.play_out(expanded_node.read().unwrap().state().clone());
             self.propagate_reward(selection_path, reward);
-            trace!("After propagate");
-            if log::log_enabled!(log::Level::Trace) {
-                self.root.best_pick(self.constant);
-            }
         }
     }
 }
