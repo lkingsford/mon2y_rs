@@ -134,6 +134,8 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                 let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
                     .filter_map(|(action, child_node)| {
+                        let child_ref = child_node.clone();
+                        let child_node = child_ref.read().unwrap();
                         if child_node.fully_explored() {
                             return None;
                         }
@@ -168,7 +170,8 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     .collect();
                 for (action, ucb) in ucbs.iter_mut() {
                     let node = children.get(action).unwrap();
-                    node.cache_ucb(*ucb);
+                    let read_node = node.read().unwrap();
+                    read_node.cache_ucb(*ucb);
                 }
                 ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
