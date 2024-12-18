@@ -360,8 +360,10 @@ mod tests {
 
         let mut tree = Tree::new(root);
         tree.expansion(&selection);
-        let node = tree.root.get_node_by_path(selection_path);
-        if let Node::Expanded { children, .. } = node {
+        let node_path = tree.root.clone();
+        let node_ref = node_path.read().unwrap().get_node_by_path(selection_path);
+        let node = node_ref.read().unwrap();
+        if let Node::Expanded { children, .. } = &*node {
             assert_eq!(children.len(), 5);
         } else {
             self::panic!("Node is not expanded");
@@ -380,17 +382,8 @@ mod tests {
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
         let mut root = create_expanded_node(root_state);
-
-        let mut explored_node = create_expanded_node(explored_state);
-        explored_node.visit(0.0f64);
-
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
-        root.insert_child(TestGameAction::WinInXTurns(3), Node::Placeholder);
-        root.visit(0.0f64);
         let tree = Tree::new(root);
-
-        let selection_path = vec![TestGameAction::WinInXTurns(2)];
-        let reward = tree.play_out(selection_path);
+        let reward = tree.play_out(explored_state);
 
         assert_eq!(reward, vec![1.0]);
     }
