@@ -164,14 +164,6 @@ where
             self.propagate_reward(expanded_nodes, reward);
         }
     }
-
-    pub fn get_node_by_path(&self, path: Vec<ActionType>) -> &Node<StateType, ActionType> {
-        let mut node = self;
-        for action in path {
-            node = node.get_child(action);
-        }
-        node
-    }
 }
 
 #[cfg(test)]
