@@ -426,14 +426,22 @@ mod tests {
         // Todo: Think about ways to tidy this.
         let nodes = vec![
             Arc::new(RwLock::new(root)),
-            owned_root.read().unwrap().get_child(TestGameAction::WinInXTurns(2)).clone(),
-            owned_root.read().unwrap()
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .clone(),
+            owned_root
+                .read()
+                .unwrap()
                 .get_child(TestGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
                 .get_child(TestGameAction::WinInXTurns(1))
                 .clone(),
-            owned_root.read().unwrap()
+            owned_root
+                .read()
+                .unwrap()
                 .get_child(TestGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
@@ -446,11 +454,12 @@ mod tests {
 
         let check_path = path.clone();
         const REWARD: f64 = 0.8;
-        tree.propagate_reward(nodes, REWARD)
+        tree.propagate_reward(nodes, vec![REWARD]);
 
         for path_i in 1..=check_path.len() {
             let semi_path = check_path[0..path_i].to_vec();
-            let node = tree.root.read().unwrap().get_node_by_path(semi_path).read().unwrap();
+            let node_ref = tree.root.read().unwrap().get_node_by_path(semi_path);
+            let node = node_ref.read().unwrap();
             assert_eq!(node.value_sum(), REWARD);
             assert_eq!(node.visit_count(), 1);
         }
@@ -494,14 +503,22 @@ mod tests {
         // Not super pleased with this here either
         let nodes = vec![
             Arc::new(RwLock::new(root)),
-            owned_root.read().unwrap().get_child(TestGameAction::WinInXTurns(2)).clone(),
-            owned_root.read().unwrap()
+            owned_root
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .clone(),
+            owned_root
+                .read()
+                .unwrap()
                 .get_child(TestGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
                 .get_child(TestGameAction::WinInXTurns(1))
                 .clone(),
-            owned_root.read().unwrap()
+            owned_root
+                .read()
+                .unwrap()
                 .get_child(TestGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
@@ -535,4 +552,3 @@ mod tests {
         }
     }
 }
-
