@@ -58,7 +58,6 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             Node::Expanded {
                 visit_count,
                 value_sum,
-                cached_ucb,
                 ..
             } => {
                 *visit_count += 1;
@@ -188,7 +187,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
 
     pub fn insert_child(&mut self, action: ActionType, child: Node<StateType, ActionType>) {
         if let Node::Expanded { children, .. } = self {
-            children.insert(action, child);
+            children.insert(action, Arc::new(RwLock::new(child)));
         } else {
             panic!("Inserting child into placeholder");
         }
@@ -218,7 +217,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             if node.is_none() {
                 node = Some(self.get_child(action));
             } else {
-                node = Some(node.unwrap().read().unwrap().get_child(action));
+                node = Some(node.unwrap().read().unwrap().get_child(action).clone());
             }
         }
         node.unwrap()

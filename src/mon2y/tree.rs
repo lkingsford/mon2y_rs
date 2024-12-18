@@ -422,13 +422,35 @@ mod tests {
             TestGameAction::WinInXTurns(1),
             TestGameAction::Win,
         ];
+        let owned_root = tree.root.clone();
+        // Todo: Think about ways to tidy this.
+        let nodes = vec![
+            Arc::new(RwLock::new(root)),
+            owned_root.read().unwrap().get_child(TestGameAction::WinInXTurns(2)).clone(),
+            owned_root.read().unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .clone(),
+            owned_root.read().unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::Win)
+                .clone(),
+        ];
+
         let check_path = path.clone();
         const REWARD: f64 = 0.8;
-        tree.propagate_reward(path, vec![REWARD]);
+        tree.propagate_reward(nodes, REWARD)
 
         for path_i in 1..=check_path.len() {
             let semi_path = check_path[0..path_i].to_vec();
-            let node = tree.root.get_node_by_path(semi_path);
+            let node = tree.root.read().unwrap().get_node_by_path(semi_path).read().unwrap();
             assert_eq!(node.value_sum(), REWARD);
             assert_eq!(node.visit_count(), 1);
         }
