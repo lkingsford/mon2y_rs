@@ -425,7 +425,7 @@ mod tests {
         let owned_root = tree.root.clone();
         // Todo: Think about ways to tidy this.
         let nodes = vec![
-            Arc::new(RwLock::new(root)),
+            tree.root.clone(),
             owned_root
                 .read()
                 .unwrap()
@@ -502,7 +502,7 @@ mod tests {
         let owned_root = tree.root.clone();
         // Not super pleased with this here either
         let nodes = vec![
-            Arc::new(RwLock::new(root)),
+            tree.root.clone(),
             owned_root
                 .read()
                 .unwrap()
