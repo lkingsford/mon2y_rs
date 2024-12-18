@@ -27,7 +27,7 @@ where
         &tree.iterate();
     }
     if log::log_enabled!(log::Level::Trace) {
-        tree.root.trace_log_children(0);
+        tree.root.clone().read().unwrap().trace_log_children(0);
     }
     match policy {
         BestTurnPolicy::MostVisits => {

@@ -219,22 +219,24 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         match self {
             Node::Expanded { children, .. } => {
                 for (action, child) in children.iter() {
-                    match child {
+                    let cloned_child = child.clone();
+                    let child_node = cloned_child.read().unwrap();
+                    match *child_node {
                         Node::Expanded { .. } => {
                             let action_name = format!("{:?}", action);
                             trace!("{} {}", "         |-".repeat(level), action_name);
                             trace!(
                                 "{} {:.6} {}",
                                 "         | ".repeat(level),
-                                child.value_sum(),
-                                child.visit_count()
+                                child_node.value_sum(),
+                                child_node.visit_count()
                             );
                             trace!(
                                 "{} {:.6}",
                                 "         | ".repeat(level),
-                                child.value_sum() / (child.visit_count() as f64)
+                                child_node.value_sum() / (child_node.visit_count() as f64)
                             );
-                            child.trace_log_children(level + 1);
+                            child_node.trace_log_children(level + 1);
                         }
                         Node::Placeholder => {
                             let action_name = format!("({:?})", action);
