@@ -197,6 +197,24 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         create_expanded_node(state)
     }
 
+    pub fn get_node_by_path(
+        &self,
+        path: Vec<ActionType>,
+    ) -> Arc<RwLock<Node<StateType, ActionType>>> {
+        if path.is_empty() {
+            panic!("Can't return empty path")
+        }
+        let mut node = None;
+        for action in path {
+            if node.is_none() {
+                node = Some(self.get_child(action));
+            } else {
+                node = Some(node.unwrap().read().unwrap().get_child(action));
+            }
+        }
+        node.unwrap()
+    }
+
     pub fn trace_log_children(&self, level: usize) {
         match self {
             Node::Expanded { children, .. } => {
