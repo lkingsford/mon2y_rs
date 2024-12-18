@@ -29,18 +29,20 @@ where
     if log::log_enabled!(log::Level::Trace) {
         tree.root.clone().read().unwrap().trace_log_children(0);
     }
+    let root_ref = tree.root.clone();
+    let root = root_ref.read().unwrap();
+
     match policy {
         BestTurnPolicy::MostVisits => {
-            if let Node::Expanded { children, .. } = &tree.root {
+            if let Node::Expanded { children, .. } = &*root {
                 debug!(
                     "Action, Visits, Value: {:?}",
                     children
                         .iter()
-                        .map(|(action, node)| (
-                            action.clone(),
-                            node.visit_count(),
-                            node.value_sum()
-                        ))
+                        .map(|(action, node)| {
+                            let node = node.read().unwrap();
+                            (action.clone(), node.visit_count(), node.value_sum())
+                        })
                         .collect::<Vec<_>>()
                 );
                 // Short circuit on a winning move
@@ -50,8 +52,10 @@ where
                 let winning_moves: Vec<ActionType> = children
                     .iter()
                     .filter_map(|(action, node)| {
+                        let node_ref = node.clone();
+                        let node = node_ref.read().unwrap();
                         if node.state().terminal() {
-                            let actor = tree.root.state().next_actor();
+                            let actor = root.state().next_actor();
                             if let Actor::Player(player_id) = actor {
                                 if let Some((index, _)) =
                                     // Annoying - but necessary because I was dumb enough to use f64
@@ -77,7 +81,7 @@ where
 
                 children
                     .iter()
-                    .max_by_key(|(_, node)| node.visit_count())
+                    .max_by_key(|(_, node)| node.read().unwrap().visit_count())
                     .unwrap()
                     .0
                     .clone()
