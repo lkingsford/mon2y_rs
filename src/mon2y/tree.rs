@@ -490,18 +490,41 @@ mod tests {
             TestGameAction::WinInXTurns(1),
             TestGameAction::Win,
         ];
+        let owned_root = tree.root.clone();
+        // Not super pleased with this here either
+        let nodes = vec![
+            Arc::new(RwLock::new(root)),
+            owned_root.read().unwrap().get_child(TestGameAction::WinInXTurns(2)).clone(),
+            owned_root.read().unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .clone(),
+            owned_root.read().unwrap()
+                .get_child(TestGameAction::WinInXTurns(2))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::WinInXTurns(1))
+                .read()
+                .unwrap()
+                .get_child(TestGameAction::Win)
+                .clone(),
+        ];
+
         let check_path = path.clone();
         // Using slightly unusual rewards to just make more certain that it was actually this reward
         const REWARD: f64 = 0.8;
         const LOSS_REWARD: f64 = -0.6;
-        tree.propagate_reward(path, vec![REWARD, LOSS_REWARD]);
+        tree.propagate_reward(nodes, vec![REWARD, LOSS_REWARD]);
 
         for path_i in 1..=check_path.len() {
             // This isn't the greatest way to do this - maybe we should be just looking it up in a
             // table.
             let semi_path = check_path[0..path_i].to_vec();
             let player_id = (path_i + 1) % 2;
-            let node = tree.root.get_node_by_path(semi_path);
+            let node_ref = tree.root.read().unwrap().get_node_by_path(semi_path);
+            let node = node_ref.read().unwrap();
             if player_id == 0 {
                 assert_eq!(node.value_sum(), REWARD);
                 assert_eq!(node.visit_count(), 1);
@@ -512,3 +535,4 @@ mod tests {
         }
     }
 }
+
