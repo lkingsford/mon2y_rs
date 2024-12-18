@@ -150,11 +150,27 @@ where
         if let Selection::FullyExplored = selection {
             return;
         };
-        let expanded_node = self.expansion(&selection);
-        if let Selection::Selection(selection_path) = selection {
-            let reward = self.play_out(expanded_node.read().unwrap().state().clone());
-            self.propagate_reward(selection_path, reward);
+        let expanded_nodes = self.expansion(&selection);
+        if let Selection::Selection(..) = selection {
+            let reward = self.play_out(
+                expanded_nodes
+                    .last()
+                    .unwrap()
+                    .read()
+                    .unwrap()
+                    .state()
+                    .clone(),
+            );
+            self.propagate_reward(expanded_nodes, reward);
         }
+    }
+
+    pub fn get_node_by_path(&self, path: Vec<ActionType>) -> &Node<StateType, ActionType> {
+        let mut node = self;
+        for action in path {
+            node = node.get_child(action);
+        }
+        node
     }
 }
 
