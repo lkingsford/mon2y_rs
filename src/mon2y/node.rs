@@ -63,7 +63,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             } => {
                 *visit_count += 1;
                 *value_sum += reward as f64;
-                self.invalidate_cached_ucb(true);
+                self.invalidate_cached_ucb();
             }
             Node::Placeholder => {
                 warn!("Visiting placeholder node");
@@ -71,7 +71,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn invalidate_cached_ucb(&self, recurse: bool) {
+    pub fn invalidate_cached_ucb(&self) {
         match self {
             Node::Expanded {
                 cached_ucb,
@@ -80,10 +80,16 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             } => {
                 let mut cached_ucb_ref = cached_ucb.write().unwrap();
                 *cached_ucb_ref = None;
-                if !recurse {
-                    for child in children.values() {
-                        // Only need to invalidate the first level of child: 'parent visits' is part of ucb
-                        child.invalidate_cached_ucb(false);
+                for child in children.values() {
+                    // Only need to invalidate the first level of child: 'parent visits' is part of ucb
+                    let child = child.clone();
+                    let child_node = child.write().unwrap();
+                    match &*child_node {
+                        Node::Expanded { cached_ucb, .. } => {
+                            let mut cached_ucb_ref = cached_ucb.write().unwrap();
+                            *cached_ucb_ref = None;
+                        }
+                        Node::Placeholder => {}
                     }
                 }
             }
