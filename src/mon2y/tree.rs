@@ -83,9 +83,10 @@ where
     pub fn expansion(
         &self,
         selection: &Selection<ActionType>,
-    ) -> Arc<RwLock<Node<StateType, ActionType>>> {
+    ) -> Vec<Arc<RwLock<Node<StateType, ActionType>>>> {
         trace!("Expansion: Selection: {:#?}", selection);
         let mut cur_node = self.root.clone();
+        let mut result: Vec<Arc<RwLock<Node<StateType, ActionType>>>> = vec![];
 
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
@@ -105,11 +106,12 @@ where
                         let expanded_child = write_node.expansion(*action, &cur_state);
                         write_node.insert_child(action.clone(), expanded_child);
                     }
+                    result.push(cur_node);
                     cur_node = child_node;
                 }
             }
         }
-        cur_node
+        result
     }
 
     pub fn play_out(&self, state: StateType) -> Vec<Reward> {
@@ -128,13 +130,14 @@ where
         cur_state.reward()
     }
 
-    pub fn propagate_reward(&mut self, selection_path: Vec<ActionType>, reward: Vec<Reward>) {
-        let mut cur_node = &mut self.root;
-        // Reward doesn't matter for root
-        cur_node.visit(0.0);
-        for action in selection_path {
+    pub fn propagate_reward(
+        &mut self,
+        nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>>,
+        reward: Vec<Reward>,
+    ) {
+        for node in nodes {
+            let mut cur_node = node.write().unwrap();
             let actor = cur_node.state().next_actor();
-            cur_node = cur_node.get_child_mut(action);
             cur_node.visit(match actor {
                 Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
                 _ => 0.0,
