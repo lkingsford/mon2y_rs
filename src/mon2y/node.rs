@@ -266,9 +266,12 @@ where
     // (I think the Node::new_expanded should be able to work? But my rust brain
     // is still learning and couldn't figure out syntax that the type checker
     // was happy with)
-    let mut children = HashMap::new();
+    let mut children: HashMap<
+        StateType::ActionType,
+        Arc<RwLock<Node<StateType, StateType::ActionType>>>,
+    > = HashMap::new();
     for action in state.permitted_actions() {
-        children.insert(action, Node::Placeholder);
+        children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
     }
     Node::Expanded {
         state,
