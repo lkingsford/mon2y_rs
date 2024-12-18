@@ -23,13 +23,16 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
 impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType, ActionType> {
     pub fn fully_explored(&self) -> bool {
         match self {
-            Node::Expanded {
-                state, children, ..
-            } => {
+            Node::Expanded { children, .. } => {
                 children.is_empty()
-                    || children.iter().all(|(_, child)| match child {
-                        Node::Expanded { .. } => child.fully_explored(),
-                        Node::Placeholder => false,
+                    || children.iter().all(|(_, child)| {
+                        let child = child.clone();
+                        // todo: can we avoid keeping this read lock through the whole fully-explored check?
+                        let child_node = child.read().unwrap();
+                        match *child_node {
+                            Node::Expanded { .. } => child_node.fully_explored(),
+                            Node::Placeholder => false,
+                        }
                     })
             }
             Node::Placeholder => false,
