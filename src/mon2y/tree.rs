@@ -102,9 +102,12 @@ where
 
                     {
                         let mut write_node = child_node.write().unwrap();
-                        let cur_state = write_node.state();
-                        let expanded_child = write_node.expansion(*action, &cur_state);
-                        write_node.insert_child(action.clone(), expanded_child);
+                        let mut cur_node_write = cur_node.write().unwrap();
+                        if let Node::Placeholder { .. } = &*write_node {
+                            let cur_state = cur_node_write.state();
+                            let expanded_child = write_node.expansion(*action, &cur_state);
+                            cur_node_write.insert_child(action.clone(), expanded_child);
+                        }
                     }
                     result.push(cur_node);
                     cur_node = child_node;
