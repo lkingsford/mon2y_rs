@@ -137,7 +137,7 @@ where
     }
 
     pub fn propagate_reward(
-        &mut self,
+        &self,
         nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>>,
         reward: Vec<Reward>,
     ) {
@@ -163,7 +163,7 @@ where
         }
     }
 
-    pub fn iterate(&mut self) {
+    pub fn iterate(&self) {
         let selection = self.selection();
         if let Selection::FullyExplored = selection {
             return;

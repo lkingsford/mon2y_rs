@@ -1,3 +1,6 @@
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
+
 use log::{debug, trace};
 
 use crate::mon2y::game::Actor;
@@ -8,24 +11,45 @@ use super::tree::Tree;
 use super::BestTurnPolicy;
 
 pub fn calculate_best_turn<
-    StateType: State<ActionType = ActionType>,
-    ActionType: Action<StateType = StateType>,
+    'a,
+    StateType: State<ActionType = ActionType> + 'a,
+    ActionType: Action<StateType = StateType> + 'a,
 >(
     iterations: usize,
-    state: StateType,
+    thread_count: usize,
+    state: &'a StateType,
     policy: BestTurnPolicy,
 ) -> <StateType as State>::ActionType
 where
-    StateType: State<ActionType = ActionType>,
-    ActionType: Action<StateType = StateType>,
+    StateType: State<ActionType = ActionType> + Sync + Send + 'a,
+    ActionType: Action<StateType = StateType> + Sync + Send + 'a,
 {
-    let mut root_node = create_expanded_node(state);
-    let mut tree = Tree::new(root_node);
+    let root_node = create_expanded_node(state);
+    let tree = Arc::new(Tree::new(root_node));
+    let mut threads = vec![];
 
-    for iteration in 0..iterations {
-        trace!("Starting iteration {}", iteration);
-        &tree.iterate();
+    let finished_iterations: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
+
+    for _ in 0..thread_count {
+        let tree_clone = Arc::clone(&tree);
+        let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
+        threads.push(std::thread::spawn(move || loop {
+            {
+                tree_clone.iterate();
+                let current_iterations =
+                    finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                trace!("Finished iteration {}", current_iterations);
+                if current_iterations >= iterations {
+                    break;
+                }
+            }
+        }));
     }
+
+    for thread in threads {
+        thread.join().unwrap();
+    }
+
     if log::log_enabled!(log::Level::Trace) {
         tree.root.clone().read().unwrap().trace_log_children(0);
     }

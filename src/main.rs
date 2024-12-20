@@ -38,9 +38,11 @@ struct Args {
     iterations: usize,
     #[arg(short, long, default_value_t = 1)]
     episodes: usize,
+    #[arg(short, long, default_value_t = 4)]
+    threads: usize,
 }
 
-fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize) {
+fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize, threads: usize) {
     let mut state = game.init_game();
 
     while !state.terminal() {
@@ -54,9 +56,12 @@ fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize) {
                         let permitted_actions = state.permitted_actions();
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
                     }
-                    Some(PlayerType::M) => {
-                        calculate_best_turn(iterations, state.clone(), BestTurnPolicy::MostVisits)
-                    }
+                    Some(PlayerType::M) => calculate_best_turn(
+                        iterations,
+                        threads,
+                        state.clone(),
+                        BestTurnPolicy::MostVisits,
+                    ),
                     _ => todo!(),
                 };
                 state = action.execute(&state);
@@ -79,7 +84,7 @@ fn main() {
     for _ in 0..args.episodes {
         match args.game {
             Games::C4 => {
-                run_game(C4, players.clone(), args.iterations);
+                run_game(C4, players.clone(), args.iterations, args.threads);
             }
         }
     }
