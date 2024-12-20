@@ -128,7 +128,6 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         Self::new_expanded(state)
     }
     pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
-        // also fix fror other player rewards
         match self {
             Node::Expanded { children, .. } => {
                 let mut ucbs: Vec<(ActionType, f64)> = children

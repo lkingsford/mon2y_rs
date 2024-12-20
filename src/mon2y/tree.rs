@@ -86,7 +86,10 @@ where
     ) -> Vec<Arc<RwLock<Node<StateType, ActionType>>>> {
         trace!("Expansion: Selection: {:#?}", selection);
         let mut cur_node = self.root.clone();
-        let mut result: Vec<Arc<RwLock<Node<StateType, ActionType>>>> = vec![];
+        // This root is needed as part of the output to ensure that propagate can work
+        // It was either here or selection. Could fit in either place.
+        // Could also be in iterate, but that was going to result in more memory allocations.
+        let mut result: Vec<Arc<RwLock<Node<StateType, ActionType>>>> = vec![self.root.clone()];
 
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
@@ -138,13 +141,25 @@ where
         nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>>,
         reward: Vec<Reward>,
     ) {
-        for node in nodes {
-            let mut cur_node = node.write().unwrap();
-            let actor = cur_node.state().next_actor();
-            cur_node.visit(match actor {
-                Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
-                _ => 0.0,
-            });
+        let mut previous_node = nodes[0].clone();
+        for node in nodes[1..].iter() {
+            {
+                let actor = {
+                    let read_previous = previous_node.read().unwrap();
+                    if let Node::Expanded { .. } = &*read_previous {
+                        read_previous.state().next_actor()
+                    } else {
+                        panic!("Attempting to propagate to a placeholder node");
+                    }
+                };
+
+                let mut cur_node = node.write().unwrap();
+                cur_node.visit(match actor {
+                    Actor::Player(player_id) => *reward.get(player_id as usize).unwrap_or(&0.0),
+                    _ => 0.0,
+                })
+            }
+            previous_node = node.clone();
         }
     }
 
@@ -155,15 +170,17 @@ where
         };
         let expanded_nodes = self.expansion(&selection);
         if let Selection::Selection(..) = selection {
-            let reward = self.play_out(
-                expanded_nodes
-                    .last()
-                    .unwrap()
-                    .read()
-                    .unwrap()
-                    .state()
-                    .clone(),
-            );
+            let reward = {
+                self.play_out(
+                    expanded_nodes
+                        .last()
+                        .unwrap()
+                        .read()
+                        .unwrap()
+                        .state()
+                        .clone(),
+                )
+            };
             self.propagate_reward(expanded_nodes, reward);
         }
     }
