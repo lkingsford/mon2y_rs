@@ -12,17 +12,17 @@ use super::BestTurnPolicy;
 
 pub fn calculate_best_turn<
     'a,
-    StateType: State<ActionType = ActionType> + 'a,
-    ActionType: Action<StateType = StateType> + 'a,
+    StateType: State<ActionType = ActionType> + Sync + Send + 'static,
+    ActionType: Action<StateType = StateType> + Sync + Send + 'static,
 >(
     iterations: usize,
     thread_count: usize,
-    state: &'a StateType,
+    state: StateType,
     policy: BestTurnPolicy,
 ) -> <StateType as State>::ActionType
 where
-    StateType: State<ActionType = ActionType> + Sync + Send + 'a,
-    ActionType: Action<StateType = StateType> + Sync + Send + 'a,
+    StateType: State<ActionType = ActionType>,
+    ActionType: Action<StateType = StateType>,
 {
     let root_node = create_expanded_node(state);
     let tree = Arc::new(Tree::new(root_node));
