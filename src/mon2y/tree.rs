@@ -104,14 +104,28 @@ where
                     };
 
                     {
-                        let mut write_node = child_node.write().unwrap();
-                        let mut cur_node_write = cur_node.write().unwrap();
-                        if let Node::Placeholder { .. } = &*write_node {
-                            let cur_state = cur_node_write.state();
-                            let expanded_child = write_node.expansion(*action, &cur_state);
-                            cur_node_write.insert_child(action.clone(), expanded_child);
+                        let cur_state = {
+                            let node = cur_node.read().unwrap();
+                            node.state().clone()
+                        };
+
+                        let expanded_child = {
+                            let read_node = child_node.read().unwrap();
+                            if let Node::Placeholder { .. } = &*read_node {
+                                Some(read_node.expansion(*action, &cur_state))
+                            } else {
+                                None
+                            }
+                        };
+
+                        if let Some(expanded_child) = expanded_child {
+                            cur_node
+                                .write()
+                                .unwrap()
+                                .insert_child(action.clone(), expanded_child);
                         }
                     }
+
                     result.push(cur_node);
                     cur_node = child_node;
                 }

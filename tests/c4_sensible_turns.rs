@@ -81,3 +81,13 @@ fn test_c4_plays_through_without_crash() {
         }
     }
 }
+#[test]
+fn test_c4_plays_through_multiple_threads_without_crash() {
+    let mut c4_state = C4.init_game();
+    while !c4_state.terminal() {
+        if let mon2y_rs::mon2y::game::Actor::Player(player) = c4_state.next_actor() {
+            let action = calculate_best_turn(100, 4, c4_state.clone(), BestTurnPolicy::MostVisits);
+            c4_state = action.execute(&c4_state);
+        }
+    }
+}
