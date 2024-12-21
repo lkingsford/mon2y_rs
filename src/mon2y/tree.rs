@@ -50,14 +50,25 @@ where
             }
         }
 
-        let mut current_selection = self.root.clone();
-        let mut result: Vec<ActionType> = vec![];
+        let mut result_stack: Vec<(Option<ActionType>, Arc<RwLock<Node<StateType, ActionType>>>)> =
+            vec![(None, self.root.clone())];
 
         loop {
+            let current = match result_stack.last() {
+                Some(x) => x.clone(),
+                None => {
+                    debug!("Result stack is empty");
+                    return Selection::FullyExplored;
+                }
+            };
             let best_pick = {
-                let node = current_selection.read().unwrap();
+                let node = current.1.read().unwrap();
                 if let Node::Expanded { .. } = &*node {
                     let best_picks = node.best_pick(self.constant);
+                    if best_picks.is_empty() {
+                        result_stack.pop();
+                        continue;
+                    }
                     best_picks[0].clone()
                 } else {
                     break;
@@ -65,7 +76,7 @@ where
             };
             // I don't like the borrow checker right now
             let next_node = {
-                let node = current_selection.read().unwrap();
+                let node = result_stack.last().unwrap().1.read().unwrap();
                 if let Node::Expanded { children, .. } = &*node {
                     children.get(&best_pick).unwrap().clone()
                 } else {
@@ -73,11 +84,10 @@ where
                 }
             };
 
-            result.push(best_pick);
-            current_selection = next_node;
+            result_stack.push((Some(best_pick), next_node.clone()));
         }
 
-        Selection::Selection(result)
+        Selection::Selection(result_stack.iter().filter_map(|x| x.0.clone()).collect())
     }
 
     pub fn expansion(
