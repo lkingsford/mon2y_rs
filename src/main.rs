@@ -1,20 +1,17 @@
 mod c4;
 mod game;
+mod games;
 mod mon2y;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use c4::C4;
 use clap::{Parser, ValueEnum};
 use game::Game;
+use games::Games;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
 
 use rand::Rng;
-
-#[derive(Debug, Clone, ValueEnum)]
-enum Games {
-    C4,
-}
 
 #[derive(Debug, Clone, ValueEnum)]
 enum PlayerType {
