@@ -61,18 +61,21 @@ where
                     return Selection::FullyExplored;
                 }
             };
-            let best_pick = {
-                let node = current.1.read().unwrap();
-                if let Node::Expanded { .. } = &*node {
-                    let best_picks = node.best_pick(self.constant);
-                    if best_picks.is_empty() {
-                        result_stack.pop();
-                        continue;
-                    }
-                    best_picks[0].clone()
-                } else {
-                    break;
+            let node = current.1.clone();
+            let expanded = {
+                let node_read = node.read().unwrap();
+                matches!(&*node_read, Node::Expanded { .. })
+            };
+
+            let best_pick = if expanded {
+                let best_picks = super::node::best_pick(&node, self.constant);
+                if best_picks.is_empty() {
+                    result_stack.pop();
+                    continue;
                 }
+                best_picks[0].clone()
+            } else {
+                break;
             };
             // I don't like the borrow checker right now
             let next_node = {

@@ -4,6 +4,7 @@ use log::{debug, trace, warn};
 use rand::Rng;
 use std::{
     collections::HashMap,
+    hash::Hash,
     sync::{Arc, RwLock},
 };
 
@@ -142,61 +143,6 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         let state = action.execute(parent_state);
         Self::new_expanded(state)
     }
-    pub fn best_pick(&self, constant: f64) -> Vec<ActionType> {
-        match self {
-            Node::Expanded { children, .. } => {
-                let mut ucbs: Vec<(ActionType, f64)> = children
-                    .iter()
-                    .filter_map(|(action, child_node)| {
-                        let (visit_count, value_sum) = {
-                        let child_ref = child_node.clone();
-                        let child_node = child_ref.read().unwrap();
-                        if child_node.fully_explored() {
-                            return None;
-                        }
-                        let cached_ucb = child_node.cached_ucb();
-                        if let Some(ucb) = cached_ucb {
-                            return Some((action.clone(), ucb));
-                        }
-                        (child_node.visit_count() as f64, child_node.value_sum())
-                    };
-                        let parent_visits = self.visit_count() as f64;
-                        if visit_count == 0.0 {
-                            return Some((action.clone(), f64::INFINITY));
-                        }
-                        let q: f64 = value_sum / visit_count;
-                        let u: f64 = (parent_visits.ln() / visit_count).sqrt();
-                        // Random used to break ties
-                        // Todo: Cache the rng
-                        let r: f64 = rand::thread_rng().gen::<f64>() * 1e-6;
-                        let ucb: f64 = (q + constant * u + r);
-                        trace!(
-                            "UCB action: {:?}, value_sum: {}, visit_count: {}, parent_visits: {}, q: {}, u: {}, c: {} ucb: {}",
-                            action,
-                            value_sum,
-                            visit_count,
-                            parent_visits,
-                            q,
-                            u,
-                            constant,
-                            ucb
-                        );
-                        Some((action.clone(), ucb))
-                    })
-                    .collect();
-                for (action, ucb) in ucbs.iter_mut() {
-                    let node = children.get(action).unwrap();
-                    let read_node = node.read().unwrap();
-                    read_node.cache_ucb(*ucb);
-                }
-                ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-                debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
-                ucbs.iter().map(|(action, _)| action.clone()).collect()
-            }
-            Node::Placeholder => Vec::new(),
-        }
-    }
-
     pub fn state(&self) -> &StateType {
         match self {
             Node::Expanded { state, .. } => state,
@@ -275,6 +221,78 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             Node::Placeholder => return,
         }
     }
+}
+
+pub fn best_pick<StateType, ActionType>(
+    node_lock: &RwLock<Node<StateType, ActionType>>,
+    constant: f64,
+) -> Vec<ActionType>
+where
+    StateType: State<ActionType = ActionType>,
+    ActionType: Action<StateType = StateType>,
+{
+    let children: HashMap<ActionType, Arc<RwLock<Node<StateType, ActionType>>>> = {
+        let node = node_lock.read().unwrap();
+        match &*node {
+            Node::Expanded { children, .. } => children
+                .iter()
+                .map(|(action, child)| (action.clone(), child.clone()))
+                .collect(),
+            Node::Placeholder => {
+                return vec![];
+            }
+        }
+    };
+    let parent_visit_count = { node_lock.read().unwrap().visit_count() } as f64;
+
+    let mut ucbs: Vec<(ActionType, f64)> = children
+                    .iter()
+                    .filter_map(|(action, child_node)| {
+                        let (visit_count, value_sum) = {
+                        let child_ref = child_node.clone();
+                        let child_node = child_ref.read().unwrap();
+                        if child_node.fully_explored() {
+                            return None;
+                        }
+                        let cached_ucb = child_node.cached_ucb();
+                        if let Some(ucb) = cached_ucb {
+                            return Some((action.clone(), ucb));
+                        }
+                        (child_node.visit_count() as f64, child_node.value_sum())
+                    };
+                        let parent_visits = parent_visit_count;
+                        if visit_count == 0.0 {
+                            return Some((action.clone(), f64::INFINITY));
+                        }
+                        let q: f64 = value_sum / visit_count;
+                        let u: f64 = (parent_visits.ln() / visit_count).sqrt();
+                        // Random used to break ties
+                        // Todo: Cache the rng
+                        let r: f64 = rand::thread_rng().gen::<f64>() * 1e-6;
+                        let ucb: f64 = (q + constant * u + r);
+                        trace!(
+                            "UCB action: {:?}, value_sum: {}, visit_count: {}, parent_visits: {}, q: {}, u: {}, c: {} ucb: {}",
+                            action,
+                            value_sum,
+                            visit_count,
+                            parent_visits,
+                            q,
+                            u,
+                            constant,
+                            ucb
+                        );
+                        Some((action.clone(), ucb))
+                    })
+                    .collect();
+
+    for (action, ucb) in ucbs.iter_mut() {
+        let node = children.get(action).unwrap();
+        let read_node = node.read().unwrap();
+        read_node.cache_ucb(*ucb);
+    }
+    ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
+    ucbs.iter().map(|(action, _)| action.clone()).collect()
 }
 
 pub fn create_expanded_node<StateType>(state: StateType) -> Node<StateType, StateType::ActionType>
