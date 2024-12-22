@@ -113,8 +113,9 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
     pub fn cache_ucb(&self, ucb: f64) {
         match self {
             Node::Expanded { cached_ucb, .. } => {
-                let mut cached_ucb_ref = cached_ucb.write().unwrap();
+                if let Ok(mut cached_ucb_ref) = cached_ucb.try_write() {
                     *cached_ucb_ref = Some(ucb);
+                }
             }
             Node::Placeholder => {}
         }
