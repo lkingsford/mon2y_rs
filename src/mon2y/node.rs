@@ -16,6 +16,7 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         /// Sum of rewards for this player
         value_sum: f64,
         cached_ucb: RwLock<Option<f64>>,
+        cached_fully_explored: Option<RwLock<bool>>,
     },
     Placeholder,
 }
@@ -23,11 +24,22 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
 impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType, ActionType> {
     pub fn fully_explored(&self) -> bool {
         match self {
-            Node::Expanded { children, .. } => {
-                children.is_empty()
-                    || children.iter().all(|(_, child)| {
+            Node::Expanded {
+                children,
+                cached_fully_explored,
+                ..
+            } => {
+                if let Some(cached) = cached_fully_explored {
+                    let read_lock = cached.read().unwrap();
+                    if *read_lock == true {
+                        return true;
+                    }
+                };
+                let child_nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>> =
+                    { children.values().cloned().collect() };
+                child_nodes.is_empty()
+                    || child_nodes.iter().all(|child| {
                         let child = child.clone();
-                        // todo: can we avoid keeping this read lock through the whole fully-explored check?
                         let child_node = child.read().unwrap();
                         match *child_node {
                             Node::Expanded { .. } => child_node.fully_explored(),
@@ -77,8 +89,10 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                 children,
                 ..
             } => {
-                let mut cached_ucb_ref = cached_ucb.write().unwrap();
-                *cached_ucb_ref = None;
+                {
+                    let mut cached_ucb_ref = cached_ucb.write().unwrap();
+                    *cached_ucb_ref = None;
+                }
                 for child in children.values() {
                     // Only need to invalidate the first level of child: 'parent visits' is part of ucb
                     let child = child.clone();
@@ -100,7 +114,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         match self {
             Node::Expanded { cached_ucb, .. } => {
                 let mut cached_ucb_ref = cached_ucb.write().unwrap();
-                *cached_ucb_ref = Some(ucb);
+                    *cached_ucb_ref = Some(ucb);
             }
             Node::Placeholder => {}
         }
@@ -133,6 +147,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                 let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
                     .filter_map(|(action, child_node)| {
+                        let (visit_count, value_sum) = {
                         let child_ref = child_node.clone();
                         let child_node = child_ref.read().unwrap();
                         if child_node.fully_explored() {
@@ -142,12 +157,13 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                         if let Some(ucb) = cached_ucb {
                             return Some((action.clone(), ucb));
                         }
-                        let visit_count = child_node.visit_count() as f64;
+                        (child_node.visit_count() as f64, child_node.value_sum())
+                    };
                         let parent_visits = self.visit_count() as f64;
                         if visit_count == 0.0 {
                             return Some((action.clone(), f64::INFINITY));
                         }
-                        let q: f64 = child_node.value_sum() / visit_count;
+                        let q: f64 = value_sum / visit_count;
                         let u: f64 = (parent_visits.ln() / visit_count).sqrt();
                         // Random used to break ties
                         // Todo: Cache the rng
@@ -156,8 +172,8 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                         trace!(
                             "UCB action: {:?}, value_sum: {}, visit_count: {}, parent_visits: {}, q: {}, u: {}, c: {} ucb: {}",
                             action,
-                            child_node.value_sum(),
-                            child_node.visit_count(),
+                            value_sum,
+                            visit_count,
                             parent_visits,
                             q,
                             u,
@@ -281,5 +297,6 @@ where
         visit_count: 0,
         value_sum: 0.0,
         cached_ucb: RwLock::new(None),
+        cached_fully_explored: None,
     }
 }
