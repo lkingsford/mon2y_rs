@@ -9,6 +9,14 @@ use std::{
 };
 
 #[derive(Debug)]
+struct CachedUcb {
+    ucb: f64,
+    value_sum: f64,
+    visit_count: u32,
+    parent_visit_count: u32,
+}
+
+#[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
     Expanded {
         state: StateType,
@@ -16,7 +24,7 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         visit_count: u32,
         /// Sum of rewards for this player
         value_sum: f64,
-        cached_ucb: RwLock<Option<f64>>,
+        cached_ucb: RwLock<Option<CachedUcb>>,
         cached_fully_explored: Option<RwLock<bool>>,
     },
     Placeholder,
@@ -75,7 +83,6 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             } => {
                 *visit_count += 1;
                 *value_sum += reward as f64;
-                self.invalidate_cached_ucb();
             }
             Node::Placeholder => {
                 warn!("Visiting placeholder node");
@@ -83,50 +90,49 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn invalidate_cached_ucb(&self) {
-        match self {
-            Node::Expanded {
-                cached_ucb,
-                children,
-                ..
-            } => {
-                {
-                    let mut cached_ucb_ref = cached_ucb.write().unwrap();
-                    *cached_ucb_ref = None;
-                }
-                for child in children.values() {
-                    // Only need to invalidate the first level of child: 'parent visits' is part of ucb
-                    let child = child.clone();
-                    let child_node = child.write().unwrap();
-                    match &*child_node {
-                        Node::Expanded { cached_ucb, .. } => {
-                            let mut cached_ucb_ref = cached_ucb.write().unwrap();
-                            *cached_ucb_ref = None;
-                        }
-                        Node::Placeholder => {}
-                    }
-                }
-            }
-            Node::Placeholder => {}
-        }
-    }
-
-    pub fn cache_ucb(&self, ucb: f64) {
+    pub fn cache_ucb(&self, ucb: f64, value_sum: f64, visit_count: u32, parent_visit_count: u32) {
         match self {
             Node::Expanded { cached_ucb, .. } => {
                 if let Ok(mut cached_ucb_ref) = cached_ucb.try_write() {
-                    *cached_ucb_ref = Some(ucb);
+                    *cached_ucb_ref = Some(CachedUcb {
+                        ucb,
+                        value_sum,
+                        visit_count,
+                        parent_visit_count,
+                    });
                 }
             }
             Node::Placeholder => {}
         }
     }
 
-    pub fn cached_ucb(&self) -> Option<f64> {
+    pub fn cached_ucb(
+        &self,
+        value_sum: f64,
+        visit_count: u32,
+        parent_visit_count: u32,
+    ) -> Option<f64> {
         match self {
             Node::Expanded { cached_ucb, .. } => {
                 let ucb = cached_ucb.read().unwrap();
-                *ucb
+                match *ucb {
+                    Some(CachedUcb {
+                        ucb: cached_ucb,
+                        value_sum: cached_value_sum,
+                        visit_count: cached_visit_count,
+                        parent_visit_count: cached_parent_visit_count,
+                    }) => {
+                        if cached_value_sum == value_sum
+                            && cached_visit_count == visit_count
+                            && cached_parent_visit_count == parent_visit_count
+                        {
+                            Some(cached_ucb)
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
+                }
             }
             Node::Placeholder => None,
         }
@@ -243,7 +249,7 @@ where
             }
         }
     };
-    let parent_visit_count = { node_lock.read().unwrap().visit_count() } as f64;
+    let parent_visit_count = { node_lock.read().unwrap().visit_count() };
 
     let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
@@ -254,13 +260,14 @@ where
                         if child_node.fully_explored() {
                             return None;
                         }
-                        let cached_ucb = child_node.cached_ucb();
+                        let cached_ucb = child_node.cached_ucb(
+                            child_node.value_sum(), child_node.visit_count(), parent_visit_count);
                         if let Some(ucb) = cached_ucb {
                             return Some((action.clone(), ucb));
                         }
                         (child_node.visit_count() as f64, child_node.value_sum())
                     };
-                        let parent_visits = parent_visit_count;
+                        let parent_visits = parent_visit_count as f64;
                         if visit_count == 0.0 {
                             return Some((action.clone(), f64::INFINITY));
                         }
@@ -288,7 +295,12 @@ where
     for (action, ucb) in ucbs.iter_mut() {
         let node = children.get(action).unwrap();
         let read_node = node.read().unwrap();
-        read_node.cache_ucb(*ucb);
+        read_node.cache_ucb(
+            *ucb,
+            read_node.value_sum(),
+            read_node.visit_count(),
+            parent_visit_count,
+        );
     }
     ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
