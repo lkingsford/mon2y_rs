@@ -78,6 +78,9 @@ where
                     .filter_map(|(action, node)| {
                         let node_ref = node.clone();
                         let node = node_ref.read().unwrap();
+                        if let Node::Placeholder = &*node {
+                            return None;
+                        }
                         if node.state().terminal() {
                             let actor = root.state().next_actor();
                             if let Actor::Player(player_id) = actor {
