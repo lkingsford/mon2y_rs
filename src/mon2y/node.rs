@@ -3,6 +3,7 @@ use core::panic;
 use log::{debug, trace, warn};
 use rand::Rng;
 use std::{
+    any,
     collections::HashMap,
     hash::Hash,
     sync::{Arc, RwLock},
@@ -249,7 +250,11 @@ where
             }
         }
     };
-    let parent_visit_count = { node_lock.read().unwrap().visit_count() };
+    // Using a minimum of 1 here, because it's possible (can reproduce 1 in every few thousand iterations) that
+    // parent_visit_count is 0 but the value sum is non-zero meaning (I think) that another selector has clashed.
+    // This is faster than additional locks.
+    // The issue is that ln(0) == NaN. So - yeah.
+    let parent_visit_count = std::cmp::max({ node_lock.read().unwrap().visit_count() }, 1);
 
     let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
