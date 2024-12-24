@@ -36,6 +36,10 @@ where
         let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
         threads.push(std::thread::spawn(move || loop {
             {
+                log::warn!(
+                    "Starting iteration {}",
+                    finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
+                );
                 tree_clone.iterate();
                 let current_iterations =
                     finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

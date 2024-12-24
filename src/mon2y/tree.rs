@@ -54,10 +54,11 @@ where
             vec![(None, self.root.clone())];
 
         loop {
+            log::debug!("Result stack size {}", result_stack.len());
             let current = match result_stack.last() {
                 Some(x) => x.clone(),
                 None => {
-                    debug!("Result stack is empty");
+                    log::warn!("Result stack is empty");
                     return Selection::FullyExplored;
                 }
             };
@@ -70,6 +71,7 @@ where
             let best_pick = if expanded {
                 let best_picks = super::node::best_pick(&node, self.constant);
                 if best_picks.is_empty() {
+                    log::warn!("Best picks is empty");
                     result_stack.pop();
                     continue;
                 }
