@@ -24,6 +24,7 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
+    log::error!("Starting next turn");
     let root_node = create_expanded_node(state);
     let tree = Arc::new(Tree::new(root_node));
     let mut threads = vec![];
