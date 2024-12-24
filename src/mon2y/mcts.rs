@@ -4,12 +4,14 @@ use std::sync::Arc;
 use log::{debug, trace};
 
 use crate::mon2y::game::Actor;
+use crate::mon2y::tree::Selection;
 
 use super::game::{Action, State};
 use super::node::{create_expanded_node, Node};
 use super::tree::Tree;
 use super::BestTurnPolicy;
 
+/// Run multiple iterations of the MCTS algorithm on a state.
 pub fn calculate_best_turn<
     'a,
     StateType: State<ActionType = ActionType> + Sync + Send + 'static,
@@ -24,6 +26,7 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
+    log::info!("Starting next turn");
     let root_node = create_expanded_node(state);
     let tree = Arc::new(Tree::new(root_node));
     let mut threads = vec![];
@@ -35,11 +38,15 @@ where
         let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
         threads.push(std::thread::spawn(move || loop {
             {
-                tree_clone.iterate();
+                trace!(
+                    "Starting iteration {}",
+                    finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
+                );
+                let result = tree_clone.iterate();
                 let current_iterations =
                     finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 trace!("Finished iteration {}", current_iterations);
-                if current_iterations >= iterations {
+                if current_iterations >= iterations || result == Selection::FullyExplored {
                     break;
                 }
             }

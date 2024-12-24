@@ -6,10 +6,14 @@ mod mon2y;
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use c4::C4;
 use clap::{Parser, ValueEnum};
+use env_logger::{fmt::Formatter, Builder};
 use game::Game;
 use games::Games;
+use log::{Level, Record};
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
+use std::io::Write;
+use std::thread;
 
 use rand::Rng;
 
@@ -41,7 +45,6 @@ struct Args {
 
 fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize, threads: usize) {
     let mut state = game.init_game();
-
     while !state.terminal() {
         let actor = state.next_actor();
         game.visualise_state(&state);
@@ -61,6 +64,7 @@ fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize, threa
                     ),
                     _ => todo!(),
                 };
+                log::info!("Player {} plays {:?}", player, action);
                 state = action.execute(&state);
             }
             Actor::GameAction(action) => {
@@ -73,6 +77,18 @@ fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize, threa
 fn main() {
     let args = Args::parse();
     env_logger::Builder::new()
+        .format(|buf: &mut Formatter, record: &Record| {
+            let thread_id = thread::current().id();
+            let timestamp = buf.timestamp_millis();
+            writeln!(
+                buf,
+                "[{}] [Thread: {:?}] [{}] - {}",
+                timestamp,
+                thread_id,
+                record.level(),
+                record.args()
+            )
+        })
         .filter_level(args.verbose.log_level_filter())
         .init();
 

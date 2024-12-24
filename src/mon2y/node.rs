@@ -10,7 +10,7 @@ use std::{
 };
 
 #[derive(Debug)]
-struct CachedUcb {
+pub struct CachedUcb {
     ucb: f64,
     value_sum: f64,
     visit_count: u32,
@@ -26,7 +26,7 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         /// Sum of rewards for this player
         value_sum: f64,
         cached_ucb: RwLock<Option<CachedUcb>>,
-        cached_fully_explored: Option<RwLock<bool>>,
+        cached_fully_explored: RwLock<Option<bool>>,
     },
     Placeholder,
 }
@@ -39,15 +39,16 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                 cached_fully_explored,
                 ..
             } => {
-                if let Some(cached) = cached_fully_explored {
-                    let read_lock = cached.read().unwrap();
-                    if *read_lock == true {
-                        return true;
+                if let Ok(cached_fully_explored_read) = cached_fully_explored.try_read() {
+                    if let Some(cached_fully_explored_value) = *cached_fully_explored_read {
+                        //log::error!("CACHE HIT");
+                        return cached_fully_explored_value;
                     }
-                };
+                }
+                //log::error!("CACHE MISS");
                 let child_nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>> =
                     { children.values().cloned().collect() };
-                child_nodes.is_empty()
+                let fully_explored = child_nodes.is_empty()
                     || child_nodes.iter().all(|child| {
                         let child = child.clone();
                         let child_node = child.read().unwrap();
@@ -55,7 +56,12 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                             Node::Expanded { .. } => child_node.fully_explored(),
                             Node::Placeholder => false,
                         }
-                    })
+                    });
+                if let Ok(mut cached_fully_explored) = cached_fully_explored.try_write() {
+                    *cached_fully_explored = Some(fully_explored);
+                    // log::error!("CACHE WRITE");
+                };
+                fully_explored
             }
             Node::Placeholder => false,
         }
@@ -80,10 +86,16 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
             Node::Expanded {
                 visit_count,
                 value_sum,
+                cached_fully_explored,
                 ..
             } => {
                 *visit_count += 1;
                 *value_sum += reward as f64;
+                if let Ok(mut cached_fully_explored) = cached_fully_explored.write() {
+                    *cached_fully_explored = None;
+                } else {
+                    panic!("Can't write cached fully explored");
+                }
             }
             Node::Placeholder => {
                 warn!("Visiting placeholder node");
@@ -263,6 +275,7 @@ where
                         let child_ref = child_node.clone();
                         let child_node = child_ref.read().unwrap();
                         if child_node.fully_explored() {
+                            log::trace!("Select short circuited - fully explored");
                             return None;
                         }
                         let cached_ucb = child_node.cached_ucb(
@@ -333,6 +346,6 @@ where
         visit_count: 0,
         value_sum: 0.0,
         cached_ucb: RwLock::new(None),
-        cached_fully_explored: None,
+        cached_fully_explored: RwLock::new(None),
     }
 }
