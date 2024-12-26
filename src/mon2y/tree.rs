@@ -195,6 +195,7 @@ where
     pub fn iterate(&self) {
         let selection = self.selection();
         if let Selection::FullyExplored = selection {
+            log::warn!("Iterate short circuited - fully explored");
             return;
         };
         let expanded_nodes = self.expansion(&selection);

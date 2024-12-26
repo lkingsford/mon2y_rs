@@ -5,6 +5,7 @@ use mon2y_rs::mon2y::game::{Action, State};
 use mon2y_rs::mon2y::node::create_expanded_node;
 use mon2y_rs::mon2y::tree::Tree;
 use mon2y_rs::mon2y::{calculate_best_turn, BestTurnPolicy};
+use test_env_log::test;
 
 #[test]
 fn test_c4_one_action_blocks_win() {
