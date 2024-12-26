@@ -91,3 +91,38 @@ fn test_c4_plays_through_multiple_threads_without_crash() {
         }
     }
 }
+
+#[test]
+fn test_c4_full_exploration() {
+    // This is more of a test that it doesn't freeze when getting fully explored
+    // is very likely.
+    let mut c4_state = C4.init_game();
+    for action in vec![
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(0),
+        c4::C4Action::Drop(1),
+        c4::C4Action::Drop(0),
+        c4::C4Action::Drop(0),
+        c4::C4Action::Drop(0),
+        c4::C4Action::Drop(4),
+        c4::C4Action::Drop(4),
+        c4::C4Action::Drop(4),
+        c4::C4Action::Drop(6),
+        c4::C4Action::Drop(5),
+        c4::C4Action::Drop(6),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(2),
+        c4::C4Action::Drop(2),
+        c4::C4Action::Drop(2),
+        c4::C4Action::Drop(2),
+        c4::C4Action::Drop(2),
+    ] {
+        c4_state = action.execute(&c4_state);
+    }
+
+    calculate_best_turn(100000, 8, c4_state, BestTurnPolicy::MostVisits);
+}
