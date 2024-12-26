@@ -4,6 +4,7 @@ use std::sync::Arc;
 use log::{debug, trace};
 
 use crate::mon2y::game::Actor;
+use crate::mon2y::tree::Selection;
 
 use super::game::{Action, State};
 use super::node::{create_expanded_node, Node};
@@ -41,11 +42,11 @@ where
                     "Starting iteration {}",
                     finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
                 );
-                tree_clone.iterate();
+                let result = tree_clone.iterate();
                 let current_iterations =
                     finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 trace!("Finished iteration {}", current_iterations);
-                if current_iterations >= iterations {
+                if current_iterations >= iterations || result == Selection::FullyExplored {
                     break;
                 }
             }

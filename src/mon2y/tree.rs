@@ -192,11 +192,11 @@ where
         }
     }
 
-    pub fn iterate(&self) {
+    pub fn iterate(&self) -> Selection<ActionType> {
         let selection = self.selection();
         if let Selection::FullyExplored = selection {
             log::warn!("Iterate short circuited - fully explored");
-            return;
+            return Selection::FullyExplored;
         };
         let expanded_nodes = self.expansion(&selection);
         if let Selection::Selection(..) = selection {
@@ -213,6 +213,7 @@ where
             };
             self.propagate_reward(expanded_nodes, reward);
         }
+        selection
     }
 }
 
