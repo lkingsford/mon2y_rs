@@ -57,9 +57,11 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                             Node::Placeholder => false,
                         }
                     });
-                if let Ok(mut cached_fully_explored) = cached_fully_explored.try_write() {
-                    *cached_fully_explored = Some(fully_explored);
-                    // log::error!("CACHE WRITE");
+                if fully_explored {
+                    if let Ok(mut cached_fully_explored) = cached_fully_explored.try_write() {
+                        *cached_fully_explored = Some(fully_explored);
+                        // log::error!("CACHE WRITE");
+                    };
                 };
                 fully_explored
             }

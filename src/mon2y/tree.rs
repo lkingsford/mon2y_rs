@@ -58,8 +58,28 @@ where
             if more_detailed_debug {
                 log::warn!(
                     "Result stack: {:?}",
-                    result_stack.iter().map(|x| x.0).collect::<Vec<_>>()
+                    result_stack
+                        .iter()
+                        .map(|x| {
+                            let node_read = x.1.read().unwrap();
+                            (x.0.clone(), node_read.fully_explored())
+                        })
+                        .collect::<Vec<_>>()
                 );
+                if result_stack.len() > 1 {
+                    let node_ref = result_stack.last().unwrap().1.clone();
+                    let node = node_ref.read().unwrap();
+                    if let Node::Expanded { children, .. } = &*node {
+                        for (action, child) in children.iter() {
+                            let child_fully_explored = child.read().unwrap().fully_explored();
+                            log::warn!(
+                                "     Child action: {:?}, fully explored: {}",
+                                action,
+                                child_fully_explored
+                            );
+                        }
+                    }
+                }
             };
             log::debug!("Result stack size {}", result_stack.len());
             let current = match result_stack.last() {
