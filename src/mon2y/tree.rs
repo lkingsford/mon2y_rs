@@ -52,8 +52,15 @@ where
 
         let mut result_stack: Vec<(Option<ActionType>, Arc<RwLock<Node<StateType, ActionType>>>)> =
             vec![(None, self.root.clone())];
+        let mut more_detailed_debug = false;
 
         loop {
+            if more_detailed_debug {
+                log::warn!(
+                    "Result stack: {:?}",
+                    result_stack.iter().map(|x| x.0).collect::<Vec<_>>()
+                );
+            };
             log::debug!("Result stack size {}", result_stack.len());
             let current = match result_stack.last() {
                 Some(x) => x.clone(),
@@ -71,7 +78,11 @@ where
             let best_pick = if expanded {
                 let best_picks = super::node::best_pick(&node, self.constant);
                 if best_picks.is_empty() {
-                    log::warn!("Best picks is empty");
+                    more_detailed_debug = true;
+                    log::warn!(
+                        "Best picks is empty. #result_stack is {} (before pop)",
+                        result_stack.len()
+                    );
                     result_stack.pop();
                     continue;
                 }
