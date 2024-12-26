@@ -41,9 +41,7 @@ struct Args {
 
 fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize, threads: usize) {
     let mut state = game.init_game();
-    let mut turn_number = 0;
     while !state.terminal() {
-        let iterations = std::cmp::min(1000 * (turn_number + 1), 150000);
         let actor = state.next_actor();
         game.visualise_state(&state);
         match actor {
@@ -62,6 +60,7 @@ fn run_game<G: Game>(game: G, players: Vec<PlayerType>, iterations: usize, threa
                     ),
                     _ => todo!(),
                 };
+                log::info!("Player {} plays {:?}", player, action);
                 state = action.execute(&state);
             }
             Actor::GameAction(action) => {

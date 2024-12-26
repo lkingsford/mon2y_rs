@@ -10,6 +10,7 @@ use super::node::{create_expanded_node, Node};
 use super::tree::Tree;
 use super::BestTurnPolicy;
 
+/// Run multiple iterations of the MCTS algorithm on a state.
 pub fn calculate_best_turn<
     'a,
     StateType: State<ActionType = ActionType> + Sync + Send + 'static,
@@ -24,7 +25,7 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
-    log::error!("Starting next turn");
+    log::info!("Starting next turn");
     let root_node = create_expanded_node(state);
     let tree = Arc::new(Tree::new(root_node));
     let mut threads = vec![];
@@ -36,7 +37,7 @@ where
         let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
         threads.push(std::thread::spawn(move || loop {
             {
-                log::warn!(
+                trace!(
                     "Starting iteration {}",
                     finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
                 );
