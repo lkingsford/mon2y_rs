@@ -277,7 +277,7 @@ where
                         let child_ref = child_node.clone();
                         let child_node = child_ref.read().unwrap();
                         if child_node.fully_explored() {
-                            log::warn!("Select short circuited - fully explored");
+                            log::trace!("Select short circuited - fully explored");
                             return None;
                         }
                         let cached_ucb = child_node.cached_ucb(
