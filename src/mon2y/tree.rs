@@ -5,6 +5,7 @@ use super::Reward;
 use core::panic;
 use log::{debug, trace};
 use rand::Rng;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, PartialEq)]
@@ -40,90 +41,52 @@ where
     /// Returns a path to the current selection
     ///
     pub fn selection(&self) -> Selection<ActionType> {
-        {
-            let root = self.root.read().unwrap();
-            if root.fully_explored() {
-                return Selection::FullyExplored;
-            }
-            if let Node::Placeholder = *root {
-                return Selection::Selection(vec![]);
-            }
+        return Tree::select_from(self.root.clone(), self.constant);
+    }
+
+    fn select_from(
+        node: Arc<RwLock<Node<StateType, ActionType>>>,
+        constant: f64,
+    ) -> Selection<ActionType> {
+        let best_pick = super::node::best_pick(&node, constant);
+        if best_pick.is_empty() {
+            return Selection::FullyExplored;
         }
-
-        let mut result_stack: Vec<(Option<ActionType>, Arc<RwLock<Node<StateType, ActionType>>>)> =
-            vec![(None, self.root.clone())];
-        let mut more_detailed_debug = false;
-
-        loop {
-            if more_detailed_debug {
-                log::warn!(
-                    "Result stack: {:?}",
-                    result_stack
-                        .iter()
-                        .map(|x| {
-                            let node_read = x.1.read().unwrap();
-                            (x.0.clone(), node_read.fully_explored())
-                        })
-                        .collect::<Vec<_>>()
-                );
-                if result_stack.len() > 1 {
-                    let node_ref = result_stack.last().unwrap().1.clone();
-                    let node = node_ref.read().unwrap();
-                    if let Node::Expanded { children, .. } = &*node {
-                        for (action, child) in children.iter() {
-                            let child_fully_explored = child.read().unwrap().fully_explored();
-                            log::warn!(
-                                "     Child action: {:?}, fully explored: {}",
-                                action,
-                                child_fully_explored
-                            );
-                        }
+        for action in best_pick.iter() {
+            let child = { node.read().unwrap().get_child(action.clone()) };
+            let is_expanded = {
+                let node = child.read().unwrap();
+                if let Node::Expanded { .. } = &*node {
+                    true
+                } else {
+                    false
+                }
+            };
+            if is_expanded {
+                let selection = Tree::select_from(child, constant);
+                match selection {
+                    // FullyExplored shouldn't normally happen here (because
+                    // best_pick will handle it) - but with multithreading, it's
+                    // possible to change the state between the two calls.
+                    // Trust me.
+                    // It's annoying.
+                    Selection::FullyExplored => {
+                        trace!("FullyExplored hit in selection");
+                        continue;
+                    }
+                    Selection::Selection(selection) => {
+                        // TBD if this would be faster with .insert or
+                        // preallocation
+                        let mut result_selection = vec![action.clone()];
+                        result_selection.extend(selection);
+                        return Selection::Selection(result_selection);
                     }
                 }
-            };
-            log::debug!("Result stack size {}", result_stack.len());
-            let current = match result_stack.last() {
-                Some(x) => x.clone(),
-                None => {
-                    log::warn!("Result stack is empty");
-                    return Selection::FullyExplored;
-                }
-            };
-            let node = current.1.clone();
-            let expanded = {
-                let node_read = node.read().unwrap();
-                matches!(&*node_read, Node::Expanded { .. })
-            };
-
-            let best_pick = if expanded {
-                let best_picks = super::node::best_pick(&node, self.constant);
-                if best_picks.is_empty() {
-                    more_detailed_debug = true;
-                    log::warn!(
-                        "Best picks is empty. #result_stack is {} (before pop)",
-                        result_stack.len()
-                    );
-                    result_stack.pop();
-                    continue;
-                }
-                best_picks[0].clone()
             } else {
-                break;
-            };
-            // I don't like the borrow checker right now
-            let next_node = {
-                let node = result_stack.last().unwrap().1.read().unwrap();
-                if let Node::Expanded { children, .. } = &*node {
-                    children.get(&best_pick).unwrap().clone()
-                } else {
-                    break;
-                }
-            };
-
-            result_stack.push((Some(best_pick), next_node.clone()));
+                return Selection::Selection(vec![action.clone()]);
+            }
         }
-
-        Selection::Selection(result_stack.iter().filter_map(|x| x.0.clone()).collect())
+        Selection::FullyExplored
     }
 
     pub fn expansion(
