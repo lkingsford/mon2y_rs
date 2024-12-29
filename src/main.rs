@@ -2,6 +2,7 @@ mod c4;
 mod game;
 mod games;
 mod mon2y;
+mod nt;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use c4::C4;
@@ -12,6 +13,7 @@ use games::Games;
 use log::{Level, Record};
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
+use nt::NT;
 use std::io::Write;
 use std::thread;
 
@@ -98,6 +100,9 @@ fn main() {
         match args.game {
             Games::C4 => {
                 run_game(C4, players.clone(), args.iterations, args.threads);
+            }
+            Games::NT => {
+                run_game(NT, players.clone(), args.iterations, args.threads);
             }
         }
     }
