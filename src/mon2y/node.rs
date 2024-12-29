@@ -1,4 +1,4 @@
-use super::game::{Action, State};
+use super::game::{Action, Actor, State};
 use core::panic;
 use log::{debug, trace, warn};
 use rand::Rng;
@@ -27,6 +27,7 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         value_sum: f64,
         cached_ucb: RwLock<Option<CachedUcb>>,
         cached_fully_explored: RwLock<Option<bool>>,
+        game_action: bool,
     },
     Placeholder,
 }
@@ -71,6 +72,13 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         match self {
             Node::Expanded { visit_count, .. } => *visit_count,
             Node::Placeholder => 0,
+        }
+    }
+
+    pub fn game_action(&self) -> bool {
+        match self {
+            Node::Expanded { game_action, .. } => *game_action,
+            Node::Placeholder => false,
         }
     }
 
@@ -266,7 +274,11 @@ where
     // parent_visit_count is 0 but the value sum is non-zero meaning (I think) that another selector has clashed.
     // This is faster than additional locks.
     // The issue is that ln(0) == NaN. So - yeah.
-    let parent_visit_count = std::cmp::max({ node_lock.read().unwrap().visit_count() }, 1);
+    let (game_action, parent_visit_count) = {
+        let node = node_lock.read().unwrap();
+        let parent_visit_count = std::cmp::max(node.visit_count(), 1);
+        (node.game_action(), parent_visit_count)
+    };
 
     let mut ucbs: Vec<(ActionType, f64)> = children
                     .iter()
@@ -283,7 +295,7 @@ where
                         if let Some(ucb) = cached_ucb {
                             return Some((action.clone(), ucb));
                         }
-                        (child_node.visit_count() as f64, child_node.value_sum())
+                        (child_node.visit_count() as f64, if game_action { 1.0 } else { child_node.value_sum()})
                     };
                         let parent_visits = parent_visit_count as f64;
                         if visit_count == 0.0 {
@@ -337,9 +349,22 @@ where
         StateType::ActionType,
         Arc<RwLock<Node<StateType, StateType::ActionType>>>,
     > = HashMap::new();
-    for action in state.permitted_actions() {
-        children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
-    }
+    let game_action = match state.next_actor() {
+        Actor::Player(_) => {
+            for action in state.permitted_actions() {
+                children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
+            }
+            false
+        }
+        // TODO: Store weighting here, not just action
+        Actor::GameAction(actions) => {
+            for action in actions {
+                children.insert(action.0, Arc::new(RwLock::new(Node::Placeholder)));
+            }
+            true
+        }
+    };
+
     Node::Expanded {
         state,
         children,
@@ -347,5 +372,6 @@ where
         value_sum: 0.0,
         cached_ucb: RwLock::new(None),
         cached_fully_explored: RwLock::new(None),
+        game_action,
     }
 }

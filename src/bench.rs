@@ -3,12 +3,14 @@ mod c4;
 mod game;
 mod games;
 mod mon2y;
+mod nt;
 
 use c4::C4;
 use clap::Parser;
 use game::Game;
 use games::Games;
 use mon2y::{calculate_best_turn, game::State, BestTurnPolicy};
+use nt::NT;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Parser)]
@@ -24,6 +26,8 @@ struct Args {
     threads: usize,
     #[arg(short, long, default_value_t = 10)]
     episodes: usize,
+    #[arg(short, long, default_value_t = 3)]
+    player_count: u8,
 }
 
 fn run_benchmark<G: Game>(game: G, iterations: usize, thread_count: usize) -> f64 {
@@ -55,6 +59,13 @@ fn main() {
     let durations: Vec<f64> = (0..args.episodes)
         .map(|_| match args.game {
             Games::C4 => run_benchmark(C4, args.iterations, args.threads),
+            Games::NT => run_benchmark(
+                NT {
+                    player_count: args.player_count,
+                },
+                args.iterations,
+                args.threads,
+            ),
         })
         .collect();
     println!("---");

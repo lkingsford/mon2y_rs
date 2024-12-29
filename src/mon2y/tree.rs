@@ -149,11 +149,21 @@ where
         let mut cur_state = Box::new(state.clone());
 
         while !cur_state.terminal() {
-            let permitted_actions = cur_state.permitted_actions();
+            match cur_state.next_actor() {
+                Actor::Player(player_id) => {
+                    let permitted_actions = cur_state.permitted_actions();
 
-            let action: ActionType =
-                permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
-            cur_state = Box::new(action.execute(&cur_state));
+                    let action: ActionType =
+                        permitted_actions[rng.gen_range(0..permitted_actions.len())].clone();
+                    cur_state = Box::new(action.execute(&cur_state));
+                }
+                Actor::GameAction(actions) => {
+                    // TODO: Add weighted rng
+                    let term = cur_state.terminal();
+                    let action = actions[rng.gen_range(0..actions.len())].clone();
+                    cur_state = Box::new(action.0.execute(&cur_state));
+                }
+            }
         }
         trace!("Reward is {:?}", cur_state.reward());
         cur_state.reward()
