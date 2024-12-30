@@ -141,9 +141,22 @@ impl State for NTState {
                 lowest_score = *score;
             }
         }
-        self.scores()
+        let mut scores = self.scores();
+        scores.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
+        let lowest_score = scores[0];
+        let highest_score = scores[scores.len() - 1];
+        let score_range = highest_score - lowest_score;
+        scores
             .iter()
-            .map(|score| if *score == lowest_score { 1.0 } else { -1.0 })
+            .map(|score| {
+                if *score == lowest_score {
+                    1.0
+                } else if *score == highest_score {
+                    -1.0
+                } else {
+                    (*score - lowest_score) / score_range * 2.0 - 1.0
+                }
+            })
             .collect()
     }
 }
