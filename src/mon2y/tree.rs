@@ -48,7 +48,10 @@ where
         node: Arc<RwLock<Node<StateType, ActionType>>>,
         constant: f64,
     ) -> Selection<ActionType> {
-        let best_pick = super::node::best_pick(&node, constant);
+        let best_pick: Vec<_> = super::node::best_pick(&node, constant)
+            .iter()
+            .map(|x| x.0.clone())
+            .collect();
         if best_pick.is_empty() {
             return Selection::FullyExplored;
         }

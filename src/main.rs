@@ -48,6 +48,8 @@ struct Args {
     inject_game_turns: bool,
     #[arg(short('T'), long)]
     limit_time: Option<f32>,
+    #[arg(short('P'), long, default_value_t=BestTurnPolicy::MostVisits)]
+    policy: BestTurnPolicy,
 }
 
 /// Play a game of the given type with the given players.
@@ -68,6 +70,7 @@ fn run_game<G: Game>(
     time_limit: Option<f32>,
     threads: usize,
     inject_game_turns: bool,
+    policy: BestTurnPolicy,
 ) {
     let mut state = game.init_game();
     while !state.terminal() {
@@ -91,7 +94,7 @@ fn run_game<G: Game>(
                         },
                         threads,
                         state.clone(),
-                        BestTurnPolicy::MostVisits,
+                        policy,
                     ),
                     _ => todo!(),
                 };
@@ -164,6 +167,7 @@ fn main() {
                     args.limit_time,
                     args.threads,
                     args.inject_game_turns,
+                    args.policy,
                 );
             }
             Games::NT => {
@@ -176,6 +180,7 @@ fn main() {
                     args.limit_time,
                     args.threads,
                     args.inject_game_turns,
+                    args.policy,
                 );
             }
         }

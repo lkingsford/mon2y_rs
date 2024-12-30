@@ -253,7 +253,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
 pub fn best_pick<StateType, ActionType>(
     node_lock: &RwLock<Node<StateType, ActionType>>,
     constant: f64,
-) -> Vec<ActionType>
+) -> Vec<(ActionType, f64)>
 where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
@@ -334,7 +334,7 @@ where
     }
     ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
-    ucbs.iter().map(|(action, _)| action.clone()).collect()
+    ucbs
 }
 
 pub fn create_expanded_node<StateType>(state: StateType) -> Node<StateType, StateType::ActionType>

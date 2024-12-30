@@ -7,7 +7,7 @@ use crate::mon2y::game::Actor;
 use crate::mon2y::tree::Selection;
 
 use super::game::{Action, State};
-use super::node::{create_expanded_node, Node};
+use super::node::{best_pick, create_expanded_node, Node};
 use super::tree::Tree;
 use super::BestTurnPolicy;
 
@@ -71,10 +71,16 @@ where
         tree.root.clone().read().unwrap().trace_log_children(0);
     }
     let root_ref = tree.root.clone();
-    let root = root_ref.read().unwrap();
 
     match policy {
+        BestTurnPolicy::Ucb0 => {
+            let picks = best_pick(&root_ref, 0.0);
+            log::info!("Action, UCB0: {:?}", picks);
+            picks[0].0
+        }
+
         BestTurnPolicy::MostVisits => {
+            let root = root_ref.read().unwrap();
             if let Node::Expanded { children, .. } = &*root {
                 log::info!(
                     "Action, Visits, Value: {:?}",
