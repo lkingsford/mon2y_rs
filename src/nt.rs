@@ -135,7 +135,16 @@ impl State for NTState {
 
     fn reward(&self) -> Vec<f64> {
         // Lowest score wins... so - we're just invertin' the scores
-        self.scores().iter().map(|score| -1.0 * score).collect()
+        let mut lowest_score = std::f64::INFINITY;
+        for score in self.scores().iter() {
+            if *score < lowest_score {
+                lowest_score = *score;
+            }
+        }
+        self.scores()
+            .iter()
+            .map(|score| if *score == lowest_score { 1.0 } else { -1.0 })
+            .collect()
     }
 }
 
