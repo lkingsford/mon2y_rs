@@ -159,6 +159,7 @@ where
                 }
                 Actor::GameAction(actions) => {
                     // TODO: Add weighted rng
+                    let term = cur_state.terminal();
                     let action = actions[rng.gen_range(0..actions.len())].clone();
                     cur_state = Box::new(action.0.execute(&cur_state));
                 }

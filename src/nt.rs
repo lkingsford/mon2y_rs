@@ -108,7 +108,7 @@ impl State for NTState {
             .iter()
             .filter(|(_, card_state)| matches!(card_state, CardState::Taken(_)))
             .count()
-            == 24
+            >= 24
     }
 
     fn reward(&self) -> Vec<f64> {

@@ -66,7 +66,7 @@ where
     match policy {
         BestTurnPolicy::MostVisits => {
             if let Node::Expanded { children, .. } = &*root {
-                debug!(
+                log::info!(
                     "Action, Visits, Value: {:?}",
                     children
                         .iter()
