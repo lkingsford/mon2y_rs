@@ -1,4 +1,4 @@
-use super::game::{Action, State};
+use super::game::{Action, Actor, State};
 use core::panic;
 use log::{debug, trace, warn};
 use rand::Rng;
@@ -337,8 +337,18 @@ where
         StateType::ActionType,
         Arc<RwLock<Node<StateType, StateType::ActionType>>>,
     > = HashMap::new();
-    for action in state.permitted_actions() {
-        children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
+    match state.next_actor() {
+        Actor::Player(_) => {
+            for action in state.permitted_actions() {
+                children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
+            }
+        }
+        // TODO: Store weighting here, not just action
+        Actor::GameAction(actions) => {
+            for action in actions {
+                children.insert(action.0, Arc::new(RwLock::new(Node::Placeholder)));
+            }
+        }
     }
     Node::Expanded {
         state,

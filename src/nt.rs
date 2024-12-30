@@ -137,7 +137,7 @@ impl State for NTState {
                 }
             };
         }
-        log::info!("Scores: {scores:?}");
+        log::debug!("Scores: {scores:?}");
         // Lowest score wins... so - we're just invertin' the scores
         scores.iter().map(|score| -1.0 * score).collect()
     }
