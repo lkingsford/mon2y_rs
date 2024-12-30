@@ -134,30 +134,23 @@ impl State for NTState {
     }
 
     fn reward(&self) -> Vec<f64> {
-        // Lowest score wins... so - we're just invertin' the scores
-        let mut lowest_score = std::f64::INFINITY;
-        for score in self.scores().iter() {
-            if *score < lowest_score {
-                lowest_score = *score;
-            }
+        // Lowest score wins
+        // Distributing reward linearly between -1 and 1 based on position, not score
+        let mut scores: Vec<(usize, f64)> = self.scores().into_iter().enumerate().collect();
+        scores.sort_unstable_by(|(_, a_score), (_, b_score)| a_score.partial_cmp(b_score).unwrap());
+
+        let player_count = scores.len();
+
+        let interval = 2.0 / (player_count as f64 - 1.0);
+        let mut reward: Vec<f64> = vec![0.0; player_count];
+
+        for (pos, (i, _)) in scores.into_iter().enumerate() {
+            reward[i] = 1.0 - (interval * pos as f64);
         }
-        let mut scores = self.scores();
-        scores.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
-        let lowest_score = scores[0];
-        let highest_score = scores[scores.len() - 1];
-        let score_range = highest_score - lowest_score;
-        scores
-            .iter()
-            .map(|score| {
-                if *score == lowest_score {
-                    1.0
-                } else if *score == highest_score {
-                    -1.0
-                } else {
-                    (*score - lowest_score) / score_range * 2.0 - 1.0
-                }
-            })
-            .collect()
+
+        log::debug!("Scores: {:?}", self.scores());
+        log::debug!("Reward: {:?}", reward);
+        reward
     }
 }
 
