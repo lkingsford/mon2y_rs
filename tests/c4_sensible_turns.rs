@@ -19,7 +19,14 @@ fn test_c4_one_action_blocks_win() {
     ] {
         c4_state = action.execute(&c4_state);
     }
-    let action = calculate_best_turn(100, 1, c4_state, BestTurnPolicy::MostVisits);
+    let action = calculate_best_turn(
+        100,
+        None,
+        1,
+        c4_state,
+        BestTurnPolicy::MostVisits,
+        2.0_f64.sqrt(),
+    );
     assert_eq!(action, c4::C4Action::Drop(0));
 }
 
@@ -36,7 +43,14 @@ fn test_c4_one_action_gets_win() {
     ] {
         c4_state = action.execute(&c4_state);
     }
-    let action = calculate_best_turn(100, 1, c4_state, BestTurnPolicy::MostVisits);
+    let action = calculate_best_turn(
+        100,
+        None,
+        1,
+        c4_state,
+        BestTurnPolicy::MostVisits,
+        2.0_f64.sqrt(),
+    );
     assert_eq!(action, c4::C4Action::Drop(3));
 }
 
@@ -77,7 +91,14 @@ fn test_c4_plays_through_without_crash() {
     let mut c4_state = C4.init_game();
     while !c4_state.terminal() {
         if let mon2y_rs::mon2y::game::Actor::Player(player) = c4_state.next_actor() {
-            let action = calculate_best_turn(100, 1, c4_state.clone(), BestTurnPolicy::MostVisits);
+            let action = calculate_best_turn(
+                100,
+                None,
+                1,
+                c4_state.clone(),
+                BestTurnPolicy::MostVisits,
+                2.0_f64.sqrt(),
+            );
             c4_state = action.execute(&c4_state);
         }
     }
@@ -87,7 +108,14 @@ fn test_c4_plays_through_multiple_threads_without_crash() {
     let mut c4_state = C4.init_game();
     while !c4_state.terminal() {
         if let mon2y_rs::mon2y::game::Actor::Player(player) = c4_state.next_actor() {
-            let action = calculate_best_turn(100, 4, c4_state.clone(), BestTurnPolicy::MostVisits);
+            let action = calculate_best_turn(
+                100,
+                None,
+                4,
+                c4_state.clone(),
+                BestTurnPolicy::MostVisits,
+                2.0_f64.sqrt(),
+            );
             c4_state = action.execute(&c4_state);
         }
     }
@@ -125,5 +153,11 @@ fn test_c4_full_exploration() {
         c4_state = action.execute(&c4_state);
     }
 
-    calculate_best_turn(100000, 8, c4_state, BestTurnPolicy::MostVisits);
+    calculate_best_turn(
+        100000,
+        8,
+        c4_state,
+        BestTurnPolicy::MostVisits,
+        2.0_f64.sqrt(),
+    );
 }

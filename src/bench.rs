@@ -33,7 +33,14 @@ struct Args {
 fn run_benchmark<G: Game>(game: G, iterations: usize, thread_count: usize) -> f64 {
     let state = game.init_game();
     let start = Instant::now();
-    calculate_best_turn(iterations, thread_count, state, BestTurnPolicy::MostVisits);
+    calculate_best_turn(
+        iterations,
+        None,
+        thread_count,
+        state,
+        BestTurnPolicy::MostVisits,
+        2.0_f64.sqrt(),
+    );
     let elapsed = start.elapsed();
     let iterations_per_second = iterations as f64 / elapsed.as_secs_f64();
     println!(

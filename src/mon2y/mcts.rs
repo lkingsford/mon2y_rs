@@ -22,6 +22,7 @@ pub fn calculate_best_turn<
     thread_count: usize,
     state: StateType,
     policy: BestTurnPolicy,
+    exploration_constant: f64,
 ) -> <StateType as State>::ActionType
 where
     StateType: State<ActionType = ActionType>,
@@ -29,7 +30,7 @@ where
 {
     log::info!("Starting next turn");
     let root_node = create_expanded_node(state);
-    let tree = Arc::new(Tree::new(root_node));
+    let tree = Arc::new(Tree::new_with_constant(root_node, exploration_constant));
     let mut threads = vec![];
 
     let finished_iterations: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));

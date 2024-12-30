@@ -16,7 +16,7 @@ pub enum Selection<ActionType: Action> {
 
 pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
     pub root: Arc<RwLock<Node<StateType, ActionType>>>,
-    constant: f64,
+    pub constant: f64,
 }
 
 impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = StateType>>
@@ -34,6 +34,16 @@ where
         Tree {
             root: Tree::node_ref(root),
             constant: 2.0_f64.sqrt(),
+        }
+    }
+
+    pub fn new_with_constant(
+        root: Node<StateType, ActionType>,
+        constant: f64,
+    ) -> Tree<StateType, ActionType> {
+        Tree {
+            root: Tree::node_ref(root),
+            constant,
         }
     }
 
