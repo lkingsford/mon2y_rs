@@ -35,6 +35,20 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug executable 'mon2y_rs (nt, inject)'",
+            "cargo": {
+                "args": ["build", "--bin=mon2y_rs", "--package=mon2y_rs"],
+                "filter": {
+                    "name": "mon2y_rs",
+                    "kind": "bin"
+                }
+            },
+            "args": ["nt", "-p", "h,h,h", "-I"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in executable 'mon2y_rs'",
             "cargo": {
                 "args": [

@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use rand::seq::IteratorRandom;
+use rand::Rng;
+
 use crate::game::Game;
 use crate::mon2y::game::{Action, Actor, State};
 
@@ -15,14 +18,45 @@ impl Action for NTAction {
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
         match self {
             NTAction::Take => {
-                todo!()
+                let mut cards = state.cards.clone();
+                cards.insert(
+                    state.current_card.unwrap(),
+                    CardState::Taken(state.next_player),
+                );
+                let mut tokens = state.tokens.clone();
+                tokens.insert(
+                    state.next_player,
+                    state.tokens[&state.next_player] + state.tokens_on_card,
+                );
+                NTState {
+                    cards,
+                    tokens,
+                    next_player: state.next_player,
+                    to_draw: true,
+                    current_card: state.current_card,
+                    tokens_on_card: 0,
+                }
             }
             NTAction::NoThanks => {
-                todo!()
+                let mut tokens = state.tokens.clone();
+                tokens.insert(state.next_player, state.tokens[&state.next_player] - 1);
+                NTState {
+                    cards: state.cards.clone(),
+                    tokens,
+                    next_player: (state.next_player + 1) % state.tokens.len() as u8,
+                    to_draw: false,
+                    current_card: state.current_card,
+                    tokens_on_card: state.tokens_on_card + 1,
+                }
             }
-            NTAction::Draw(u8) => {
-                todo!()
-            }
+            NTAction::Draw(card) => NTState {
+                cards: state.cards.clone(),
+                tokens: state.tokens.clone(),
+                next_player: state.next_player,
+                to_draw: false,
+                current_card: Some(*card),
+                tokens_on_card: 0,
+            },
         }
     }
 }
@@ -35,11 +69,11 @@ enum CardState<Actor> {
 
 #[derive(Clone)]
 pub struct NTState {
-    cards: HashMap<u8, CardState<Actor<NTAction>>>,
+    cards: HashMap<u8, CardState<u8>>,
     tokens: HashMap<u8, u8>,
     next_player: u8,
     to_draw: bool,
-    current_card: u8,
+    current_card: Option<u8>,
     tokens_on_card: u8,
 }
 
@@ -48,13 +82,17 @@ impl State for NTState {
 
     fn next_actor(&self) -> Actor<NTAction> {
         match self.to_draw {
-            true => Actor::Player(self.next_player),
-            false => Actor::GameAction(self.possible_non_player_actions()),
+            false => Actor::Player(self.next_player),
+            true => Actor::GameAction(self.possible_non_player_actions()),
         }
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
-        todo!()
+        if self.tokens[&self.next_player] > 0 {
+            vec![NTAction::Take, NTAction::NoThanks]
+        } else {
+            vec![NTAction::Take]
+        }
     }
 
     fn possible_non_player_actions(&self) -> Vec<(Self::ActionType, f64)> {
@@ -79,7 +117,7 @@ impl State for NTState {
 }
 
 pub struct NT {
-    player_count: u8,
+    pub player_count: u8,
 }
 
 impl Game for NT {
@@ -87,11 +125,25 @@ impl Game for NT {
     type ActionType = NTAction;
 
     fn visualise_state(&self, state: &Self::StateType) {
-        todo!()
-    }
-
-    fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
-        todo!()
+        for i in 0..self.player_count {
+            println!(
+                "Player {}: ({} tokens) - {}",
+                i,
+                state.tokens[&i],
+                state
+                    .cards
+                    .iter()
+                    .filter(|(_, card)| matches!(card, CardState::Taken(taken_i) if *taken_i == i))
+                    .map(|(&card, _)| card.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
+        println!(
+            "Current card: {:?}, with {} tokens",
+            state.current_card, state.tokens_on_card
+        );
+        println!("Active player: {}", state.next_player);
     }
 
     fn init_game(&self) -> Self::StateType {
@@ -99,7 +151,7 @@ impl Game for NT {
             cards: (3..35)
                 .map(|card| (card, CardState::Drawable))
                 .collect::<HashMap<_, _>>(),
-            tokens: (0..self.player_count - 1)
+            tokens: (0..self.player_count)
                 .map(|player_id| {
                     (
                         player_id,
@@ -111,9 +163,9 @@ impl Game for NT {
                     )
                 })
                 .collect::<HashMap<_, _>>(),
-            current_card: rand::Rng::gen_range(&mut rand::thread_rng(), 3..35),
+            current_card: None,
             next_player: 0,
-            to_draw: false,
+            to_draw: true,
             tokens_on_card: 0,
         }
     }
