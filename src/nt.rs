@@ -61,7 +61,7 @@ impl Action for NTAction {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum CardState<Actor> {
     Drawable,
     Taken(Actor),
@@ -112,7 +112,34 @@ impl State for NTState {
     }
 
     fn reward(&self) -> Vec<f64> {
-        todo!()
+        let mut scores = self
+            .tokens
+            .iter()
+            .map(|(_, tokens)| -1.0 * *tokens as f64)
+            .collect::<Vec<_>>();
+        // I know this could be functional, but maybe later.
+        for (card, card_state) in &self.cards {
+            if let CardState::Taken(player) = card_state {
+                if (*card == 3)
+                    || (*card > 0
+                        && self
+                            .cards
+                            .get(&(*card - 1))
+                            .map_or(false, |prev_card_state| {
+                                if let CardState::Taken(prev_owned) = prev_card_state {
+                                    *prev_owned == *player
+                                } else {
+                                    false
+                                }
+                            }))
+                {
+                    scores[*player as usize] += *card as f64;
+                }
+            };
+        }
+        log::info!("Scores: {scores:?}");
+        // Lowest score wins... so - we're just invertin' the scores
+        scores.iter().map(|score| -1.0 * score).collect()
     }
 }
 
