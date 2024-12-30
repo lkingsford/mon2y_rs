@@ -141,11 +141,11 @@ impl State for NTState {
 
         let player_count = scores.len();
 
-        let interval = 2.0 / (player_count as f64 - 1.0);
+        let interval = 1.0 / (player_count as f64 - 1.0);
         let mut reward: Vec<f64> = vec![0.0; player_count];
 
         for (pos, (i, _)) in scores.into_iter().enumerate() {
-            reward[i] = 1.0 - (interval * pos as f64);
+            reward[i] = 1.0 - (interval * pos as f64) + (if i == 0 { 1.0 } else { 0.0 })
         }
 
         log::debug!("Scores: {:?}", self.scores());
