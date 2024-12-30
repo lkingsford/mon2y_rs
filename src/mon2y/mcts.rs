@@ -18,6 +18,7 @@ pub fn calculate_best_turn<
     ActionType: Action<StateType = StateType> + Sync + Send + 'static,
 >(
     iterations: usize,
+    time_limit: Option<std::time::Duration>,
     thread_count: usize,
     state: StateType,
     policy: BestTurnPolicy,
@@ -36,6 +37,7 @@ where
     for _ in 0..thread_count {
         let tree_clone = Arc::clone(&tree);
         let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
+        let time_started = std::time::Instant::now();
         threads.push(std::thread::spawn(move || loop {
             {
                 trace!(
@@ -46,7 +48,10 @@ where
                 let current_iterations =
                     finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 trace!("Finished iteration {}", current_iterations);
-                if current_iterations >= iterations || result == Selection::FullyExplored {
+                if current_iterations >= iterations
+                    || result == Selection::FullyExplored
+                    || time_started.elapsed() > time_limit.unwrap_or(std::time::Duration::MAX)
+                {
                     break;
                 }
             }
@@ -56,6 +61,11 @@ where
     for thread in threads {
         thread.join().unwrap();
     }
+
+    log::info!(
+        "Completed {} iterations",
+        finished_iterations.load(std::sync::atomic::Ordering::SeqCst)
+    );
 
     if log::log_enabled!(log::Level::Trace) {
         tree.root.clone().read().unwrap().trace_log_children(0);

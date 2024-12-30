@@ -46,6 +46,8 @@ struct Args {
     threads: usize,
     #[arg(short('I'), long, default_value_t = false)]
     inject_game_turns: bool,
+    #[arg(short('T'), long)]
+    limit_time: Option<f32>,
 }
 
 /// Play a game of the given type with the given players.
@@ -63,6 +65,7 @@ fn run_game<G: Game>(
     game: G,
     players: Vec<PlayerType>,
     iterations: usize,
+    time_limit: Option<f32>,
     threads: usize,
     inject_game_turns: bool,
 ) {
@@ -80,6 +83,12 @@ fn run_game<G: Game>(
                     }
                     Some(PlayerType::M) => calculate_best_turn(
                         iterations,
+                        match time_limit {
+                            None => None,
+                            Some(time_limit) => {
+                                Some(std::time::Duration::from_secs_f32(time_limit))
+                            }
+                        },
                         threads,
                         state.clone(),
                         BestTurnPolicy::MostVisits,
@@ -152,6 +161,7 @@ fn main() {
                     C4,
                     players.clone(),
                     args.iterations,
+                    args.limit_time,
                     args.threads,
                     args.inject_game_turns,
                 );
@@ -163,6 +173,7 @@ fn main() {
                     },
                     players.clone(),
                     args.iterations,
+                    args.limit_time,
                     args.threads,
                     args.inject_game_turns,
                 );
