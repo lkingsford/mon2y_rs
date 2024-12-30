@@ -77,6 +77,28 @@ pub struct NTState {
     tokens_on_card: u8,
 }
 
+impl NTState {
+    fn scores(&self) -> Vec<f64> {
+        let mut scores = self
+            .tokens
+            .iter()
+            .map(|(_, tokens)| -1.0 * *tokens as f64)
+            .collect::<Vec<_>>();
+        // I know this could be functional, but maybe later.
+        for (card, card_state) in &self.cards {
+            if let CardState::Taken(player) = card_state {
+                if (*card == 3)
+                    || (*card > 0
+                        && !matches!(self.cards.get(&(*card - 1)), Some(CardState::Taken(owned)) if owned == player))
+                {
+                    scores[*player as usize] += *card as f64;
+                }
+            }
+        }
+        scores
+    }
+}
+
 impl State for NTState {
     type ActionType = NTAction;
 
@@ -112,34 +134,8 @@ impl State for NTState {
     }
 
     fn reward(&self) -> Vec<f64> {
-        let mut scores = self
-            .tokens
-            .iter()
-            .map(|(_, tokens)| -1.0 * *tokens as f64)
-            .collect::<Vec<_>>();
-        // I know this could be functional, but maybe later.
-        for (card, card_state) in &self.cards {
-            if let CardState::Taken(player) = card_state {
-                if (*card == 3)
-                    || (*card > 0
-                        && self
-                            .cards
-                            .get(&(*card - 1))
-                            .map_or(false, |prev_card_state| {
-                                if let CardState::Taken(prev_owned) = prev_card_state {
-                                    *prev_owned == *player
-                                } else {
-                                    false
-                                }
-                            }))
-                {
-                    scores[*player as usize] += *card as f64;
-                }
-            };
-        }
-        log::debug!("Scores: {scores:?}");
         // Lowest score wins... so - we're just invertin' the scores
-        scores.iter().map(|score| -1.0 * score).collect()
+        self.scores().iter().map(|score| -1.0 * score).collect()
     }
 }
 
@@ -171,6 +167,10 @@ impl Game for NT {
             state.current_card, state.tokens_on_card
         );
         println!("Active player: {}", state.next_player);
+
+        if state.terminal() {
+            println!("Scores: {:?}", state.scores());
+        }
     }
 
     fn init_game(&self) -> Self::StateType {

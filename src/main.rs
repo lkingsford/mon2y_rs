@@ -122,6 +122,7 @@ fn run_game<G: Game>(
             }
         }
     }
+    game.visualise_state(&state);
 }
 
 fn main() {
