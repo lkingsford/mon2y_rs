@@ -26,6 +26,7 @@ fn test_c4_one_action_blocks_win() {
         c4_state,
         BestTurnPolicy::MostVisits,
         2.0_f64.sqrt(),
+        false,
     );
     assert_eq!(action, c4::C4Action::Drop(0));
 }
@@ -50,6 +51,7 @@ fn test_c4_one_action_gets_win() {
         c4_state,
         BestTurnPolicy::MostVisits,
         2.0_f64.sqrt(),
+        false,
     );
     assert_eq!(action, c4::C4Action::Drop(3));
 }
@@ -98,6 +100,7 @@ fn test_c4_plays_through_without_crash() {
                 c4_state.clone(),
                 BestTurnPolicy::MostVisits,
                 2.0_f64.sqrt(),
+                false,
             );
             c4_state = action.execute(&c4_state);
         }
@@ -115,6 +118,7 @@ fn test_c4_plays_through_multiple_threads_without_crash() {
                 c4_state.clone(),
                 BestTurnPolicy::MostVisits,
                 2.0_f64.sqrt(),
+                false,
             );
             c4_state = action.execute(&c4_state);
         }
@@ -159,5 +163,6 @@ fn test_c4_full_exploration() {
         c4_state,
         BestTurnPolicy::MostVisits,
         2.0_f64.sqrt(),
+        false,
     );
 }

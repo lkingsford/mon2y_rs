@@ -23,6 +23,7 @@ pub fn calculate_best_turn<
     state: StateType,
     policy: BestTurnPolicy,
     exploration_constant: f64,
+    log_children: bool,
 ) -> <StateType as State>::ActionType
 where
     StateType: State<ActionType = ActionType>,
@@ -68,8 +69,8 @@ where
         finished_iterations.load(std::sync::atomic::Ordering::SeqCst)
     );
 
-    if log::log_enabled!(log::Level::Trace) {
-        tree.root.clone().read().unwrap().trace_log_children(0);
+    if log::log_enabled!(log::Level::Trace) || log_children {
+        tree.root.clone().read().unwrap().log_children(0);
     }
     let root_ref = tree.root.clone();
 

@@ -14,9 +14,9 @@ use log::{Level, Record};
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
 use nt::NT;
-use std::io;
 use std::io::Write;
 use std::thread;
+use std::{io, vec};
 
 use rand::Rng;
 
@@ -52,6 +52,8 @@ struct Args {
     policy: BestTurnPolicy,
     #[arg(short('c'), long, default_value_t = 1.4142135623730951)]
     exploration_constant: f64,
+    #[arg(long, default_value_t = false)]
+    log_children: bool,
 }
 
 /// Play a game of the given type with the given players.
@@ -74,6 +76,7 @@ fn run_game<G: Game>(
     inject_game_turns: bool,
     policy: BestTurnPolicy,
     constant: f64,
+    log_children: bool,
 ) {
     let mut state = game.init_game();
     while !state.terminal() {
@@ -99,6 +102,7 @@ fn run_game<G: Game>(
                         state.clone(),
                         policy,
                         constant,
+                        log_children,
                     ),
                     _ => todo!(),
                 };
@@ -173,6 +177,7 @@ fn main() {
                     args.inject_game_turns,
                     args.policy,
                     args.exploration_constant,
+                    args.log_children,
                 );
             }
             Games::NT => {
@@ -187,6 +192,7 @@ fn main() {
                     args.inject_game_turns,
                     args.policy,
                     args.exploration_constant,
+                    args.log_children,
                 );
             }
         }

@@ -215,7 +215,10 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         node.unwrap()
     }
 
-    pub fn trace_log_children(&self, level: usize) {
+    pub fn log_children(&self, level: usize) {
+        if level == 0 {
+            log::info!("--- TREE ---");
+        }
         match self {
             Node::Expanded { children, .. } => {
                 for (action, child) in children.iter() {
@@ -224,23 +227,23 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     match *child_node {
                         Node::Expanded { .. } => {
                             let action_name = format!("{:?}", action);
-                            trace!("{} {}", "         |-".repeat(level), action_name);
-                            trace!(
+                            log::info!("{} {}", "         |-".repeat(level), action_name);
+                            log::info!(
                                 "{} {:.6} {}",
                                 "         | ".repeat(level),
                                 child_node.value_sum(),
                                 child_node.visit_count()
                             );
-                            trace!(
+                            log::info!(
                                 "{} {:.6}",
                                 "         | ".repeat(level),
                                 child_node.value_sum() / (child_node.visit_count() as f64)
                             );
-                            child_node.trace_log_children(level + 1);
+                            child_node.log_children(level + 1);
                         }
                         Node::Placeholder => {
                             let action_name = format!("({:?})", action);
-                            trace!("{} {}", "         |-".repeat(level), action_name);
+                            log::info!("{} {}", "         |-".repeat(level), action_name);
                         }
                     }
                 }
