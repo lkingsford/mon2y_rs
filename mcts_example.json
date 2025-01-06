@@ -1,13 +1,19 @@
 {
     "game": "NT",
-    "actors": [
+    "episodes": 50,
+    "players": [
         {
-            "type": "random"
+            "type": "Random"
         },
         {
-            "type": "mcts",
-            "policy": "most-visits",
-            "iterations": 10000
+            "type": "Mcts",
+            "policy": "MostVisits",
+            "iterations": 100
+        },
+        {
+            "type": "Mcts",
+            "policy": "MostVisits",
+            "iterations": 200
         }
     ]
 }

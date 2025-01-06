@@ -43,10 +43,10 @@ enum PlayerSettings {
 #[derive(Debug, Deserialize, Clone)]
 struct MctsSettings {
     policy: BestTurnPolicy,
-    exploration_constant: f64,
+    exploration_constant: Option<f64>,
     iterations: usize,
     time_limit: Option<f32>,
-    threads: usize,
+    threads: Option<usize>,
 }
 
 fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
@@ -68,10 +68,16 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
                                 Some(std::time::Duration::from_secs_f32(time_limit))
                             }
                         },
-                        mcts_settings.threads,
+                        match mcts_settings.threads {
+                            None => 4,
+                            Some(thread) => thread,
+                        },
                         state.clone(),
                         mcts_settings.policy,
-                        mcts_settings.exploration_constant,
+                        match mcts_settings.exploration_constant {
+                            None => 2.0_f64.sqrt(),
+                            Some(constant) => constant,
+                        },
                         false,
                     ),
                     _ => todo!(),
@@ -86,7 +92,6 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
             }
         }
     }
-    game.visualise_state(&state);
     state.reward()
 }
 
@@ -129,6 +134,7 @@ fn main() {
             results[i] += *r;
         }
     }
+    println!("{:?}", arena_settings);
     println!("Player\tResult\tPercentage");
     let total: f64 = results.iter().sum();
     for (i, r) in results.iter().enumerate() {
