@@ -118,7 +118,7 @@ fn main() {
     let arena_settings: ArenaSettings =
         serde_json::from_str(&config_file).expect("Failed to parse config file");
 
-    let mut results = vec![0.0; arena_settings.players.len()];
+    let mut results = vec![(0.0, 0); arena_settings.players.len()];
     for episode in 0..arena_settings.episodes {
         log::info!("Starting episode {}", episode);
         let result = match arena_settings.game {
@@ -130,14 +130,28 @@ fn main() {
                 arena_settings.players.clone(),
             ),
         };
+        let max_result = result
+            .iter()
+            .map(|r| r)
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Less));
         for (i, r) in result.iter().enumerate() {
-            results[i] += *r;
+            results[i].0 += *r;
+            if Some(r) == max_result {
+                results[i].1 += 1;
+            }
         }
     }
     println!("{:?}", arena_settings);
-    println!("Player\tResult\tPercentage");
-    let total: f64 = results.iter().sum();
+    println!("Player\tReward\t%\tWins\t%");
+    let total: f64 = results.iter().map(|r| r.0 as f64).sum();
     for (i, r) in results.iter().enumerate() {
-        println!("{}\t{:?}\t{:>5.2}%", i + 1, r, (100.0 * r) / total);
+        println!(
+            "{}\t{:?}\t{:>5.2}%\t{:?}\t{:>5.2}%",
+            i + 1,
+            r.0,
+            (100.0 * r.0) / total,
+            r.1,
+            (100.0 * r.1 as f64) / arena_settings.episodes as f64
+        );
     }
 }
