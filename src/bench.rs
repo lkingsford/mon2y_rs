@@ -1,16 +1,13 @@
 //! Benchmarks mon2y_rs by just taking the first turn and timing it
-mod c4;
 mod game;
 mod games;
 mod mon2y;
-mod nt;
 
-use c4::C4;
 use clap::Parser;
 use game::Game;
 use games::Games;
+use games::{C4, NT};
 use mon2y::{calculate_best_turn, game::State, BestTurnPolicy};
-use nt::NT;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Parser)]

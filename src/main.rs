@@ -1,19 +1,16 @@
-mod c4;
 mod game;
 mod games;
 mod mon2y;
-mod nt;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
-use c4::C4;
 use clap::{Parser, ValueEnum};
 use env_logger::{fmt::Formatter, Builder};
 use game::Game;
 use games::Games;
+use games::{C4, NT};
 use log::{Level, Record};
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
-use nt::NT;
 use std::io::Write;
 use std::thread;
 use std::{io, vec};
