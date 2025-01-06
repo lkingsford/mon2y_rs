@@ -8,14 +8,18 @@
         {
             "type": "Mcts",
             "policy": "MostVisits",
-            "iterations": 100,
-            "exploration_constant": 2.0,
-            "threads": 1
+            "iterations": 10000,
+            "exploration_constant": 2.0
         },
         {
             "type": "Mcts",
             "policy": "MostVisits",
-            "iterations": 200
+            "iterations": 10000
+        },
+        {
+            "type": "Mcts",
+            "policy": "Ucb0",
+            "iterations": 10000
         }
     ]
 }
