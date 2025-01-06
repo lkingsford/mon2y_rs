@@ -21,6 +21,6 @@
             "type": "Mcts",
             "policy": "MostVisits",
             "iterations": 100000
-        },
+        }
     ]
 }
