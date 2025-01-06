@@ -3,17 +3,19 @@ mod game;
 mod games;
 mod mon2y;
 
-use clap::Parser;
-use env_logger::fmt::Formatter;
+//use crate::mon2y::action_log::{Action, ActionLogEntry};
+use clap::{Parser, ValueEnum};
+use env_logger::{fmt::Formatter, Builder};
 use game::Game;
 use games::Games;
 use games::{C4, NT};
-use log::Record;
+use log::{Level, Record};
 use mon2y::game::{Action, Actor, State};
-use mon2y_rs::mon2y::{calculate_best_turn, BestTurnPolicy};
+use mon2y::{calculate_best_turn, BestTurnPolicy};
 use rand::Rng;
 use serde::Deserialize;
-use std::{fs, thread};
+use std::io::Write;
+use std::{fs, io, thread};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -31,14 +33,14 @@ struct ArenaSettings {
     players: Vec<PlayerSettings>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type")]
 enum PlayerSettings {
     Random,
     Mcts(MctsSettings),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct MctsSettings {
     policy: BestTurnPolicy,
     exploration_constant: f64,
@@ -53,13 +55,12 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
         let actor = state.next_actor();
         match actor {
             Actor::Player(player) => {
-                let player = &players[player as usize];
-                let action: G::ActionType = match player {
-                    PlayerSettings::Random => {
+                let action: G::ActionType = match players.get(player as usize) {
+                    Some(PlayerSettings::Random) => {
                         let permitted_actions = state.permitted_actions();
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
                     }
-                    PlayerSettings::Mcts(mcts_settings) => calculate_best_turn(
+                    Some(PlayerSettings::Mcts(mcts_settings)) => calculate_best_turn(
                         mcts_settings.iterations,
                         match mcts_settings.time_limit {
                             None => None,
@@ -73,15 +74,19 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
                         mcts_settings.exploration_constant,
                         false,
                     ),
+                    _ => todo!(),
                 };
+                log::debug!("Player {} plays {:?}", player, action);
                 state = action.execute(&state);
             }
             Actor::GameAction(actions) => {
+                //TODO: Use a weighted random (because the second variable is supposed to be the weight)
                 let action = actions[rand::thread_rng().gen_range(0..actions.len())].0;
                 state = action.execute(&state);
             }
         }
     }
+    game.visualise_state(&state);
     state.reward()
 }
 
@@ -109,19 +114,24 @@ fn main() {
         serde_json::from_str(&config_file).expect("Failed to parse config file");
 
     let mut results = vec![0.0; arena_settings.players.len()];
-    for episode_count in 0..arena_settings.episodes {
-        log::info!("Starting episode {}", episode_count);
-        let episode_result = match arena_settings.game {
-            Games::C4 => run_episode(games::C4, arena_settings.players),
+    for episode in 0..arena_settings.episodes {
+        log::info!("Starting episode {}", episode);
+        let result = match arena_settings.game {
+            Games::C4 => run_episode(C4, arena_settings.players.clone()),
             Games::NT => run_episode(
-                games::NT {
+                NT {
                     player_count: arena_settings.players.len() as u8,
                 },
-                arena_settings.players,
+                arena_settings.players.clone(),
             ),
         };
-        for (i, result) in episode_result.iter().enumerate() {
-            results[i] += *result;
+        for (i, r) in result.iter().enumerate() {
+            results[i] += *r;
         }
+    }
+    println!("Player\tResult\tPercentage");
+    let total: f64 = results.iter().sum();
+    for (i, r) in results.iter().enumerate() {
+        println!("{}\t{:?}\t{:>5.2}%", i + 1, r, (100.0 * r) / total);
     }
 }
