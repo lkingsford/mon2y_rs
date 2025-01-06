@@ -21,7 +21,7 @@ use std::{fs, io, thread};
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg()]
-    config_file: String,
+    config_file: Vec<String>,
     #[command(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
 }
@@ -95,26 +95,8 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
     state.reward()
 }
 
-fn main() {
-    let args = Args::parse();
-    env_logger::Builder::new()
-        .format(|buf: &mut Formatter, record: &Record| {
-            let thread_id = thread::current().id();
-            let timestamp = buf.timestamp_millis();
-            writeln!(
-                buf,
-                "[{}] [Thread: {:?}] [{}] - {}",
-                timestamp,
-                thread_id,
-                record.level(),
-                record.args()
-            )
-        })
-        .filter_level(args.verbose.log_level_filter())
-        .init();
-
-    // Open the config file
-    let config_file = fs::read_to_string(&args.config_file).expect("Failed to read config file");
+fn run_config(config_file: String) {
+    let config_file = fs::read_to_string(&config_file).expect("Failed to read config file");
     let arena_settings: ArenaSettings =
         serde_json::from_str(&config_file).expect("Failed to parse config file");
 
@@ -141,6 +123,7 @@ fn main() {
             }
         }
     }
+    println!();
     println!("{:?}", arena_settings);
     println!("Player\tReward\t%\tWins\t%");
     let total: f64 = results.iter().map(|r| r.0 as f64).sum();
@@ -153,5 +136,28 @@ fn main() {
             r.1,
             (100.0 * r.1 as f64) / arena_settings.episodes as f64
         );
+    }
+}
+
+fn main() {
+    let args = Args::parse();
+    env_logger::Builder::new()
+        .format(|buf: &mut Formatter, record: &Record| {
+            let thread_id = thread::current().id();
+            let timestamp = buf.timestamp_millis();
+            writeln!(
+                buf,
+                "[{}] [Thread: {:?}] [{}] - {}",
+                timestamp,
+                thread_id,
+                record.level(),
+                record.args()
+            )
+        })
+        .filter_level(args.verbose.log_level_filter())
+        .init();
+
+    for config_file in args.config_file {
+        run_config(config_file);
     }
 }
