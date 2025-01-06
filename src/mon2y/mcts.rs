@@ -29,7 +29,7 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
-    log::info!("Starting next turn");
+    log::debug!("Starting next turn");
     let root_node = create_expanded_node(state);
     let tree = Arc::new(Tree::new_with_constant(root_node, exploration_constant));
     let mut threads = vec![];
@@ -64,7 +64,7 @@ where
         thread.join().unwrap();
     }
 
-    log::info!(
+    log::debug!(
         "Completed {} iterations",
         finished_iterations.load(std::sync::atomic::Ordering::SeqCst)
     );
@@ -77,14 +77,14 @@ where
     match policy {
         BestTurnPolicy::Ucb0 => {
             let picks = best_pick(&root_ref, 0.0);
-            log::info!("Action, UCB0: {:?}", picks);
+            log::debug!("Action, UCB0: {:?}", picks);
             picks[0].0
         }
 
         BestTurnPolicy::MostVisits => {
             let root = root_ref.read().unwrap();
             if let Node::Expanded { children, .. } = &*root {
-                log::info!(
+                log::debug!(
                     "Action, Visits, Value: {:?}",
                     children
                         .iter()
