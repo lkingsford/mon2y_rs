@@ -1,0 +1,13 @@
+{
+    "game": "NT",
+    "actors": [
+        {
+            "type": "random"
+        },
+        {
+            "type": "mcts",
+            "policy": "most-visits",
+            "iterations": 10000
+        }
+    ]
+}

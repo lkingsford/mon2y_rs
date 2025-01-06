@@ -4,10 +4,11 @@ pub use mcts::calculate_best_turn;
 pub mod node;
 pub mod tree;
 use clap::ValueEnum;
+use serde::Deserialize;
 
 pub type Reward = f64;
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, Deserialize)]
 pub enum BestTurnPolicy {
     MostVisits,
     Ucb0,

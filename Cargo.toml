@@ -20,3 +20,7 @@ test-env-log = "0.2.8"
 [[bin]]
 name = "bench"
 path = "src/bench.rs"
+
+[[bin]]
+name = "arena"
+path = "src/arena.rs"
