@@ -1,6 +1,6 @@
 {
-    "game": "NT",
-    "episodes": 50,
+    "game": "C4",
+    "episodes": 20,
     "players": [
         {
             "type": "Random"

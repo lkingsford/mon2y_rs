@@ -1,0 +1,26 @@
+{
+    "game": "NT",
+    "episodes": 50,
+    "players": [
+        {
+            "type": "Mcts",
+            "policy": "MostVisits",
+            "iterations": 600000
+        },
+        {
+            "type": "Mcts",
+            "policy": "MostVisits",
+            "iterations": 100000
+        },
+        {
+            "type": "Mcts",
+            "policy": "MostVisits",
+            "iterations": 100000
+        },
+        {
+            "type": "Mcts",
+            "policy": "MostVisits",
+            "iterations": 100000
+        },
+    ]
+}

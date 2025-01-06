@@ -5,7 +5,7 @@
         {
             "type": "Mcts",
             "policy": "MostVisits",
-            "iterations": 100000
+            "iterations": 300000
         },
         {
             "type": "Random"
