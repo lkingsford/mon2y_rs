@@ -1,0 +1,28 @@
+
+ArenaSettings { game: NT, episodes: 50, players: [Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 300000, time_limit: None, threads: None }), Random, Random, Random] }
+Player	Reward	%	Wins	%
+1	99.66666666666667	66.44%	50	100.00%
+2	14.666666666666668	 9.78%	0	 0.00%
+3	19.0	12.67%	0	 0.00%
+4	16.666666666666668	11.11%	0	 0.00%
+
+ArenaSettings { game: NT, episodes: 50, players: [Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None }), Random, Random, Random] }
+Player	Reward	%	Wins	%
+1	99.66666666666666	66.44%	50	100.00%
+2	14.000000000000002	 9.33%	0	 0.00%
+3	20.333333333333332	13.56%	0	 0.00%
+4	15.999999999999998	10.67%	0	 0.00%
+
+ArenaSettings { game: NT, episodes: 50, players: [Mcts(MctsSettings { policy: Ucb0, exploration_constant: None, iterations: 100000, time_limit: None, threads: None }), Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None }), Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None }), Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None })] }
+Player	Reward	%	Wins	%
+1	79.00000000000003	52.67%	50	100.00%
+2	23.33333333333333	15.56%	2	 4.00%
+3	22.000000000000004	14.67%	4	 8.00%
+4	25.666666666666664	17.11%	2	 4.00%
+
+ArenaSettings { game: NT, episodes: 50, players: [Mcts(MctsSettings { policy: MostVisits, exploration_constant: Some(2.0), iterations: 100000, time_limit: None, threads: None }), Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None }), Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None }), Mcts(MctsSettings { policy: MostVisits, exploration_constant: None, iterations: 100000, time_limit: None, threads: None })] }
+Player	Reward	%	Wins	%
+1	71.33333333333333	47.56%	50	100.00%
+2	24.333333333333325	16.22%	6	12.00%
+3	27.000000000000004	18.00%	4	 8.00%
+4	27.333333333333332	18.22%	4	 8.00%

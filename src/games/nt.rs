@@ -148,8 +148,8 @@ impl State for NTState {
             reward[i] = 1.0 - (interval * pos as f64) + (if i == 0 { 1.0 } else { 0.0 })
         }
 
-        log::debug!("Scores: {:?}", self.scores());
-        log::debug!("Reward: {:?}", reward);
+        log::trace!("Scores: {:?}", self.scores());
+        log::trace!("Reward: {:?}", reward);
         reward
     }
 }

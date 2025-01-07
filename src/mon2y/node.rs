@@ -336,7 +336,7 @@ where
         );
     }
     ucbs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    debug!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
+    trace!("UCBS action, ucb: {:?}", ucbs.iter().collect::<Vec<_>>());
     ucbs
 }
 
