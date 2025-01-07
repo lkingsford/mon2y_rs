@@ -1,0 +1,21 @@
+{
+    "game": "NT",
+    "episodes": 50,
+    "players": [
+        {
+            "type": "Mcts",
+            "policy": "Ucb0",
+            "iterations": 10000,
+            "exploration_constant": 5.0
+        },
+        {
+            "type": "Random"
+        },
+        {
+            "type": "Random"
+        },
+        {
+            "type": "Random"
+        }
+    ]
+}
