@@ -164,14 +164,18 @@ impl Game for NT {
 
     fn visualise_state(&self, state: &Self::StateType) {
         for i in 0..self.player_count {
+            let mut cards = state
+                .cards
+                .iter()
+                .filter(|(_, card)| matches!(card, CardState::Taken(taken_i) if *taken_i == i))
+                .collect::<Vec<_>>();
+            cards.sort_by(|a, b| a.0.cmp(b.0));
             println!(
                 "Player {}: ({} tokens) - {}",
                 i,
                 state.tokens[&i],
-                state
-                    .cards
+                cards
                     .iter()
-                    .filter(|(_, card)| matches!(card, CardState::Taken(taken_i) if *taken_i == i))
                     .map(|(&card, _)| card.to_string())
                     .collect::<Vec<_>>()
                     .join(" ")
