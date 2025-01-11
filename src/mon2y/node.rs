@@ -28,8 +28,11 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         cached_ucb: RwLock<Option<CachedUcb>>,
         cached_fully_explored: RwLock<Option<bool>>,
         game_action: bool,
+        weight: Option<f64>,
     },
-    Placeholder,
+    Placeholder {
+        weight: Option<f64>,
+    },
 }
 
 impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType, ActionType> {
@@ -55,7 +58,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                         let child_node = child.read().unwrap();
                         match *child_node {
                             Node::Expanded { .. } => child_node.fully_explored(),
-                            Node::Placeholder => false,
+                            Node::Placeholder { .. } => false,
                         }
                     });
                 if let Ok(mut cached_fully_explored) = cached_fully_explored.try_write() {
@@ -64,28 +67,35 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                 };
                 fully_explored
             }
-            Node::Placeholder => false,
+            Node::Placeholder { .. } => false,
         }
     }
 
     pub fn visit_count(&self) -> u32 {
         match self {
             Node::Expanded { visit_count, .. } => *visit_count,
-            Node::Placeholder => 0,
+            Node::Placeholder { .. } => 0,
         }
     }
 
     pub fn game_action(&self) -> bool {
         match self {
             Node::Expanded { game_action, .. } => *game_action,
-            Node::Placeholder => false,
+            Node::Placeholder { .. } => false,
         }
     }
 
     pub fn value_sum(&self) -> f64 {
         match self {
             Node::Expanded { value_sum, .. } => *value_sum,
-            Node::Placeholder => 0.0,
+            Node::Placeholder { .. } => 0.0,
+        }
+    }
+
+    pub fn weight(&self) -> f64 {
+        match self {
+            Node::Expanded { weight, .. } => weight.unwrap_or(1.0),
+            Node::Placeholder { weight, .. } => weight.unwrap_or(1.0),
         }
     }
 
@@ -105,7 +115,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     panic!("Can't write cached fully explored");
                 }
             }
-            Node::Placeholder => {
+            Node::Placeholder { .. } => {
                 warn!("Visiting placeholder node");
             }
         }
@@ -123,7 +133,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     });
                 }
             }
-            Node::Placeholder => {}
+            Node::Placeholder { .. } => {}
         }
     }
 
@@ -155,7 +165,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     None => None,
                 }
             }
-            Node::Placeholder => None,
+            Node::Placeholder { .. } => None,
         }
     }
 
@@ -164,16 +174,21 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         action: ActionType,
         parent_state: &<ActionType as Action>::StateType,
     ) -> Node<StateType, <StateType as State>::ActionType> {
-        if let Node::Expanded { .. } = self {
-            panic!("Expanding an expanded node");
+        match self {
+            Node::Expanded { .. } => {
+                panic!("Expanding an expanded node");
+            }
+            Node::Placeholder { weight, .. } => {
+                let state = action.execute(parent_state);
+                Self::new_expanded(state, *weight)
+            }
         }
-        let state = action.execute(parent_state);
-        Self::new_expanded(state)
     }
+
     pub fn state(&self) -> &StateType {
         match self {
             Node::Expanded { state, .. } => state,
-            Node::Placeholder => panic!("Placeholder node has no state"),
+            Node::Placeholder { .. } => panic!("Placeholder node has no state"),
         }
     }
 
@@ -193,8 +208,11 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn new_expanded(state: StateType) -> Node<StateType, <StateType as State>::ActionType> {
-        create_expanded_node(state)
+    pub fn new_expanded(
+        state: StateType,
+        weight: Option<f64>,
+    ) -> Node<StateType, <StateType as State>::ActionType> {
+        create_expanded_node(state, weight)
     }
 
     pub fn get_node_by_path(
@@ -241,14 +259,14 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                             );
                             child_node.log_children(level + 1);
                         }
-                        Node::Placeholder => {
+                        Node::Placeholder { .. } => {
                             let action_name = format!("({:?})", action);
                             log::info!("{} {}", "         |-".repeat(level), action_name);
                         }
                     }
                 }
             }
-            Node::Placeholder => return,
+            Node::Placeholder { .. } => return,
         }
     }
 }
@@ -268,7 +286,7 @@ where
                 .iter()
                 .map(|(action, child)| (action.clone(), child.clone()))
                 .collect(),
-            Node::Placeholder => {
+            Node::Placeholder { .. } => {
                 return vec![];
             }
         }
@@ -298,7 +316,7 @@ where
                         if let Some(ucb) = cached_ucb {
                             return Some((action.clone(), ucb));
                         }
-                        (child_node.visit_count() as f64, if game_action { 1.0 } else { child_node.value_sum()})
+                        (child_node.visit_count() as f64, if game_action { 1.0 / child_node.weight() } else { child_node.value_sum()})
                     };
                         let parent_visits = parent_visit_count as f64;
                         if visit_count == 0.0 {
@@ -340,7 +358,10 @@ where
     ucbs
 }
 
-pub fn create_expanded_node<StateType>(state: StateType) -> Node<StateType, StateType::ActionType>
+pub fn create_expanded_node<StateType>(
+    state: StateType,
+    weight: Option<f64>,
+) -> Node<StateType, StateType::ActionType>
 where
     StateType: State,
 {
@@ -355,14 +376,21 @@ where
     let game_action = match state.next_actor() {
         Actor::Player(_) => {
             for action in state.permitted_actions() {
-                children.insert(action, Arc::new(RwLock::new(Node::Placeholder)));
+                children.insert(
+                    action,
+                    Arc::new(RwLock::new(Node::Placeholder { weight: None })),
+                );
             }
             false
         }
-        // TODO: Store weighting here, not just action
         Actor::GameAction(actions) => {
             for action in actions {
-                children.insert(action.0, Arc::new(RwLock::new(Node::Placeholder)));
+                children.insert(
+                    action.0,
+                    Arc::new(RwLock::new(Node::Placeholder {
+                        weight: Some(action.1),
+                    })),
+                );
             }
             true
         }
@@ -376,5 +404,6 @@ where
         cached_ucb: RwLock::new(None),
         cached_fully_explored: RwLock::new(None),
         game_action,
+        weight,
     }
 }

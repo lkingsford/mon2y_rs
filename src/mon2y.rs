@@ -3,6 +3,7 @@ mod mcts;
 pub use mcts::calculate_best_turn;
 pub mod node;
 pub mod tree;
+pub mod weighted_random;
 use clap::ValueEnum;
 use serde::Deserialize;
 

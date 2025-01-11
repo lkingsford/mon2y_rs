@@ -30,7 +30,7 @@ where
     ActionType: Action<StateType = StateType>,
 {
     log::debug!("Starting next turn");
-    let root_node = create_expanded_node(state);
+    let root_node = create_expanded_node(state, None);
     let tree = Arc::new(Tree::new_with_constant(root_node, exploration_constant));
     let mut threads = vec![];
 
@@ -103,7 +103,7 @@ where
                     .filter_map(|(action, node)| {
                         let node_ref = node.clone();
                         let node = node_ref.read().unwrap();
-                        if let Node::Placeholder = &*node {
+                        if let Node::Placeholder { .. } = &*node {
                             return None;
                         }
                         if node.state().terminal() {

@@ -326,13 +326,16 @@ mod tests {
         };
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
-        let mut root = create_expanded_node(root_state);
+        let mut root = create_expanded_node(root_state, None);
 
-        let mut explored_node = create_expanded_node(explored_state);
+        let mut explored_node = create_expanded_node(explored_state, None);
         explored_node.visit(0.0f64);
 
         root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
-        root.insert_child(TestGameAction::WinInXTurns(3), Node::Placeholder);
+        root.insert_child(
+            TestGameAction::WinInXTurns(3),
+            Node::Placeholder { weight: None },
+        );
         root.visit(0.0f64);
         let tree = Tree::new(root);
 
@@ -361,13 +364,16 @@ mod tests {
         let mut explored_state_1 = TestGameAction::WinInXTurns(2).execute(&root_state);
         explored_state_1.injected_permitted_actions = vec![TestGameAction::WinInXTurns(1)];
         let explored_state_2 = TestGameAction::WinInXTurns(3).execute(&root_state);
-        let mut root = create_expanded_node(root_state);
+        let mut root = create_expanded_node(root_state, None);
 
-        let mut explored_node_1 = create_expanded_node(explored_state_1);
+        let mut explored_node_1 = create_expanded_node(explored_state_1, None);
         explored_node_1.visit(0.0f64);
-        explored_node_1.insert_child(TestGameAction::WinInXTurns(1), Node::Placeholder);
+        explored_node_1.insert_child(
+            TestGameAction::WinInXTurns(1),
+            Node::Placeholder { weight: None },
+        );
 
-        let mut explored_node_2 = create_expanded_node(explored_state_2);
+        let mut explored_node_2 = create_expanded_node(explored_state_2, None);
         explored_node_2.visit(-1.0f64);
         explored_node_2.visit(0.0f64);
 
@@ -404,16 +410,16 @@ mod tests {
             vec![TestGameAction::NextTurnInjectActionCount(5)];
 
         let explored_state_2 = TestGameAction::WinInXTurns(3).execute(&root_state);
-        let mut root = create_expanded_node(root_state);
+        let mut root = create_expanded_node(root_state, None);
 
-        let mut explored_node_1 = create_expanded_node(explored_state_1);
+        let mut explored_node_1 = create_expanded_node(explored_state_1, None);
         explored_node_1.visit(0.0f64);
         explored_node_1.insert_child(
             TestGameAction::NextTurnInjectActionCount(5),
-            Node::Placeholder,
+            Node::Placeholder { weight: None },
         );
 
-        let mut explored_node_2 = create_expanded_node(explored_state_2);
+        let mut explored_node_2 = create_expanded_node(explored_state_2, None);
         explored_node_2.visit(-1.0f64);
         explored_node_2.visit(0.0f64);
 
@@ -449,7 +455,7 @@ mod tests {
         };
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
-        let mut root = create_expanded_node(root_state);
+        let mut root = create_expanded_node(root_state, None);
         let tree = Tree::new(root);
         let reward = tree.play_out(explored_state);
 
@@ -470,15 +476,17 @@ mod tests {
         };
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
-        let mut root = create_expanded_node(root_state);
+        let mut root = create_expanded_node(root_state, None);
 
-        let mut explored_node = create_expanded_node(explored_state);
+        let mut explored_node = create_expanded_node(explored_state, None);
 
-        let mut child_node =
-            create_expanded_node(TestGameAction::WinInXTurns(1).execute(&explored_node.state()));
+        let mut child_node = create_expanded_node(
+            TestGameAction::WinInXTurns(1).execute(&explored_node.state()),
+            None,
+        );
 
         let grandchild_state = TestGameAction::Win.execute(&child_node.state());
-        let grandchild_node = create_expanded_node(grandchild_state);
+        let grandchild_node = create_expanded_node(grandchild_state, None);
 
         child_node.insert_child(TestGameAction::Win, grandchild_node);
         explored_node.insert_child(TestGameAction::WinInXTurns(1), child_node);
@@ -547,15 +555,17 @@ mod tests {
         };
 
         let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
-        let mut root = create_expanded_node(root_state);
+        let mut root = create_expanded_node(root_state, None);
 
-        let mut explored_node = create_expanded_node(explored_state);
+        let mut explored_node = create_expanded_node(explored_state, None);
 
-        let mut child_node =
-            create_expanded_node(TestGameAction::WinInXTurns(1).execute(&explored_node.state()));
+        let mut child_node = create_expanded_node(
+            TestGameAction::WinInXTurns(1).execute(&explored_node.state()),
+            None,
+        );
 
         let grandchild_state = TestGameAction::Win.execute(&child_node.state());
-        let grandchild_node = create_expanded_node(grandchild_state);
+        let grandchild_node = create_expanded_node(grandchild_state, None);
 
         child_node.insert_child(TestGameAction::Win, grandchild_node);
         explored_node.insert_child(TestGameAction::WinInXTurns(1), child_node);

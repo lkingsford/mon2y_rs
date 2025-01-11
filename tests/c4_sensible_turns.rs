@@ -70,7 +70,7 @@ fn test_c4_play_out_repeated() {
     ] {
         c4_state = action.execute(&c4_state);
     }
-    let mut root_node = create_expanded_node(c4_state);
+    let mut root_node = create_expanded_node(c4_state, None);
     let tree = Tree::new(root_node);
     let mut p0_wins = 0.0;
     let mut p1_wins = 0.0;
