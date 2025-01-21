@@ -1,6 +1,6 @@
-use mon2y_rs::c4;
-use mon2y_rs::c4::C4;
 use mon2y_rs::game::Game;
+use mon2y_rs::games::c4;
+use mon2y_rs::games::c4::C4;
 use mon2y_rs::mon2y::game::{Action, State};
 use mon2y_rs::mon2y::node::create_expanded_node;
 use mon2y_rs::mon2y::tree::Tree;
@@ -159,6 +159,7 @@ fn test_c4_full_exploration() {
 
     calculate_best_turn(
         100000,
+        None,
         8,
         c4_state,
         BestTurnPolicy::MostVisits,

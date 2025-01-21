@@ -1,4 +1,5 @@
 //! Benchmarks mon2y_rs by just taking the first turn and timing it
+mod test;
 mod game;
 mod games;
 mod mon2y;

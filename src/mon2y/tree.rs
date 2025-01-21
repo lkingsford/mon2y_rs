@@ -236,78 +236,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
-
     use super::*;
-
-    #[derive(Clone, Debug)]
-    struct TestGameState {
-        injected_reward: Vec<f64>,
-        injected_terminal: bool,
-        injected_permitted_actions: Vec<TestGameAction>,
-        player_count: u8,
-        next_player_id: u8,
-    }
-
-    impl State for TestGameState {
-        type ActionType = TestGameAction;
-        fn permitted_actions(&self) -> Vec<Self::ActionType> {
-            self.injected_permitted_actions.clone()
-        }
-        fn next_actor(&self) -> Actor<Self::ActionType> {
-            Actor::Player(self.next_player_id)
-        }
-        fn reward(&self) -> Vec<f64> {
-            return self.injected_reward.clone();
-        }
-
-        fn terminal(&self) -> bool {
-            return self.injected_terminal;
-        }
-    }
-
-    #[derive(Hash, Copy, Clone, Eq, PartialEq, Debug)]
-    enum TestGameAction {
-        Win,
-        WinInXTurns(u8),
-        NextTurnInjectActionCount(u8),
-    }
-    impl Action for TestGameAction {
-        type StateType = TestGameState;
-        fn execute(&self, state: &Self::StateType) -> Self::StateType {
-            let next_player_id = if let Actor::Player(player_id) = state.next_actor() {
-                (player_id + 1) % state.player_count
-            } else {
-                self::panic!("Not a player");
-            };
-            match self {
-                TestGameAction::NextTurnInjectActionCount(c) => TestGameState {
-                    injected_permitted_actions: (0..*c)
-                        .map(|i| TestGameAction::WinInXTurns(i))
-                        .collect(),
-                    next_player_id,
-                    ..state.clone()
-                },
-                TestGameAction::WinInXTurns(turns) => TestGameState {
-                    injected_permitted_actions: {
-                        if (*turns > 0) {
-                            vec![TestGameAction::WinInXTurns(turns - 1)]
-                        } else {
-                            vec![TestGameAction::Win]
-                        }
-                    },
-                    next_player_id,
-                    ..state.clone()
-                },
-                TestGameAction::Win => TestGameState {
-                    injected_terminal: true,
-                    injected_reward: vec![1.0],
-                    next_player_id,
-                    ..state.clone()
-                },
-            }
-        }
-    }
+    use crate::test::injectable_game::{TestGameAction, TestGameState};
+    use std::vec;
 
     ///
     /// Test that selection returns the unexplored path at the next node

@@ -1,6 +1,7 @@
 mod game;
 mod games;
 mod mon2y;
+mod test;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use clap::{Parser, ValueEnum};

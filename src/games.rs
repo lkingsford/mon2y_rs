@@ -1,5 +1,5 @@
-mod c4;
-mod nt;
+pub mod c4;
+pub mod nt;
 
 pub use c4::C4;
 pub use nt::NT;

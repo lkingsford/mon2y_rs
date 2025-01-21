@@ -1,4 +1,5 @@
 //! Plays configurations of the MCTS against one another
+mod test;
 mod game;
 mod games;
 mod mon2y;
