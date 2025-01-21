@@ -237,7 +237,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::injectable_game::{TestGameAction, TestGameState};
+    use crate::test::injectable_game::{InjectableGameAction, InjectableGameState};
     use std::vec;
 
     ///
@@ -245,26 +245,26 @@ mod tests {
     ///
     #[test]
     fn test_selection_basic() {
-        let root_state = TestGameState {
+        let root_state = InjectableGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
             injected_permitted_actions: vec![
-                TestGameAction::WinInXTurns(2),
-                TestGameAction::WinInXTurns(3),
+                InjectableGameAction::WinInXTurns(2),
+                InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
             next_player_id: 0,
         };
 
-        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         let mut root = create_expanded_node(root_state, None);
 
         let mut explored_node = create_expanded_node(explored_state, None);
         explored_node.visit(0.0f64);
 
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
+        root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node);
         root.insert_child(
-            TestGameAction::WinInXTurns(3),
+            InjectableGameAction::WinInXTurns(3),
             Node::Placeholder { weight: None },
         );
         root.visit(0.0f64);
@@ -272,7 +272,7 @@ mod tests {
 
         assert_eq!(
             tree.selection(),
-            Selection::Selection(vec![TestGameAction::WinInXTurns(3)])
+            Selection::Selection(vec![InjectableGameAction::WinInXTurns(3)])
         );
     }
 
@@ -281,26 +281,26 @@ mod tests {
     ///
     #[test]
     fn test_selection_multiple_expanded() {
-        let root_state = TestGameState {
+        let root_state = InjectableGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
             injected_permitted_actions: vec![
-                TestGameAction::WinInXTurns(2),
-                TestGameAction::WinInXTurns(3),
+                InjectableGameAction::WinInXTurns(2),
+                InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
             next_player_id: 0,
         };
 
-        let mut explored_state_1 = TestGameAction::WinInXTurns(2).execute(&root_state);
-        explored_state_1.injected_permitted_actions = vec![TestGameAction::WinInXTurns(1)];
-        let explored_state_2 = TestGameAction::WinInXTurns(3).execute(&root_state);
+        let mut explored_state_1 = InjectableGameAction::WinInXTurns(2).execute(&root_state);
+        explored_state_1.injected_permitted_actions = vec![InjectableGameAction::WinInXTurns(1)];
+        let explored_state_2 = InjectableGameAction::WinInXTurns(3).execute(&root_state);
         let mut root = create_expanded_node(root_state, None);
 
         let mut explored_node_1 = create_expanded_node(explored_state_1, None);
         explored_node_1.visit(0.0f64);
         explored_node_1.insert_child(
-            TestGameAction::WinInXTurns(1),
+            InjectableGameAction::WinInXTurns(1),
             Node::Placeholder { weight: None },
         );
 
@@ -308,8 +308,8 @@ mod tests {
         explored_node_2.visit(-1.0f64);
         explored_node_2.visit(0.0f64);
 
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node_1);
-        root.insert_child(TestGameAction::WinInXTurns(3), explored_node_2);
+        root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node_1);
+        root.insert_child(InjectableGameAction::WinInXTurns(3), explored_node_2);
         root.visit(0.0f64);
         root.visit(0.0f64);
         root.visit(0.0f64);
@@ -318,35 +318,35 @@ mod tests {
         assert_eq!(
             tree.selection(),
             Selection::Selection(vec![
-                TestGameAction::WinInXTurns(2),
-                TestGameAction::WinInXTurns(1)
+                InjectableGameAction::WinInXTurns(2),
+                InjectableGameAction::WinInXTurns(1)
             ])
         );
     }
 
     #[test]
     fn test_expansion_basic() {
-        let root_state = TestGameState {
+        let root_state = InjectableGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
             injected_permitted_actions: vec![
-                TestGameAction::WinInXTurns(2),
-                TestGameAction::WinInXTurns(3),
+                InjectableGameAction::WinInXTurns(2),
+                InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
             next_player_id: 0,
         };
-        let mut explored_state_1 = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let mut explored_state_1 = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         explored_state_1.injected_permitted_actions =
-            vec![TestGameAction::NextTurnInjectActionCount(5)];
+            vec![InjectableGameAction::NextTurnInjectActionCount(5)];
 
-        let explored_state_2 = TestGameAction::WinInXTurns(3).execute(&root_state);
+        let explored_state_2 = InjectableGameAction::WinInXTurns(3).execute(&root_state);
         let mut root = create_expanded_node(root_state, None);
 
         let mut explored_node_1 = create_expanded_node(explored_state_1, None);
         explored_node_1.visit(0.0f64);
         explored_node_1.insert_child(
-            TestGameAction::NextTurnInjectActionCount(5),
+            InjectableGameAction::NextTurnInjectActionCount(5),
             Node::Placeholder { weight: None },
         );
 
@@ -354,12 +354,12 @@ mod tests {
         explored_node_2.visit(-1.0f64);
         explored_node_2.visit(0.0f64);
 
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node_1);
-        root.insert_child(TestGameAction::WinInXTurns(3), explored_node_2);
+        root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node_1);
+        root.insert_child(InjectableGameAction::WinInXTurns(3), explored_node_2);
 
         let selection_path = vec![
-            TestGameAction::WinInXTurns(2),
-            TestGameAction::NextTurnInjectActionCount(5),
+            InjectableGameAction::WinInXTurns(2),
+            InjectableGameAction::NextTurnInjectActionCount(5),
         ];
         let selection = Selection::Selection(selection_path.clone());
 
@@ -377,15 +377,15 @@ mod tests {
 
     #[test]
     fn test_play_out() {
-        let root_state = TestGameState {
+        let root_state = InjectableGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
-            injected_permitted_actions: vec![TestGameAction::WinInXTurns(3)],
+            injected_permitted_actions: vec![InjectableGameAction::WinInXTurns(3)],
             player_count: 1,
             next_player_id: 0,
         };
 
-        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         let mut root = create_expanded_node(root_state, None);
         let tree = Tree::new(root);
         let reward = tree.play_out(explored_state);
@@ -395,39 +395,39 @@ mod tests {
 
     #[test]
     fn test_propagate_one_player() {
-        let root_state = TestGameState {
+        let root_state = InjectableGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
             injected_permitted_actions: vec![
-                TestGameAction::WinInXTurns(2),
-                TestGameAction::WinInXTurns(3),
+                InjectableGameAction::WinInXTurns(2),
+                InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
             next_player_id: 0,
         };
 
-        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         let mut root = create_expanded_node(root_state, None);
 
         let mut explored_node = create_expanded_node(explored_state, None);
 
         let mut child_node = create_expanded_node(
-            TestGameAction::WinInXTurns(1).execute(&explored_node.state()),
+            InjectableGameAction::WinInXTurns(1).execute(&explored_node.state()),
             None,
         );
 
-        let grandchild_state = TestGameAction::Win.execute(&child_node.state());
+        let grandchild_state = InjectableGameAction::Win.execute(&child_node.state());
         let grandchild_node = create_expanded_node(grandchild_state, None);
 
-        child_node.insert_child(TestGameAction::Win, grandchild_node);
-        explored_node.insert_child(TestGameAction::WinInXTurns(1), child_node);
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
+        child_node.insert_child(InjectableGameAction::Win, grandchild_node);
+        explored_node.insert_child(InjectableGameAction::WinInXTurns(1), child_node);
+        root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node);
         let mut tree = Tree::new(root);
 
         let path = vec![
-            TestGameAction::WinInXTurns(2),
-            TestGameAction::WinInXTurns(1),
-            TestGameAction::Win,
+            InjectableGameAction::WinInXTurns(2),
+            InjectableGameAction::WinInXTurns(1),
+            InjectableGameAction::Win,
         ];
         let owned_root = tree.root.clone();
         // Todo: Think about ways to tidy this.
@@ -436,26 +436,26 @@ mod tests {
             owned_root
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(2))
+                .get_child(InjectableGameAction::WinInXTurns(2))
                 .clone(),
             owned_root
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(2))
+                .get_child(InjectableGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(1))
+                .get_child(InjectableGameAction::WinInXTurns(1))
                 .clone(),
             owned_root
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(2))
+                .get_child(InjectableGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(1))
+                .get_child(InjectableGameAction::WinInXTurns(1))
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::Win)
+                .get_child(InjectableGameAction::Win)
                 .clone(),
         ];
 
@@ -474,39 +474,39 @@ mod tests {
 
     #[test]
     fn test_propagate_two_players() {
-        let root_state = TestGameState {
+        let root_state = InjectableGameState {
             injected_reward: vec![0.0],
             injected_terminal: false,
             injected_permitted_actions: vec![
-                TestGameAction::WinInXTurns(2),
-                TestGameAction::WinInXTurns(3),
+                InjectableGameAction::WinInXTurns(2),
+                InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 2,
             next_player_id: 0,
         };
 
-        let explored_state = TestGameAction::WinInXTurns(2).execute(&root_state);
+        let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         let mut root = create_expanded_node(root_state, None);
 
         let mut explored_node = create_expanded_node(explored_state, None);
 
         let mut child_node = create_expanded_node(
-            TestGameAction::WinInXTurns(1).execute(&explored_node.state()),
+            InjectableGameAction::WinInXTurns(1).execute(&explored_node.state()),
             None,
         );
 
-        let grandchild_state = TestGameAction::Win.execute(&child_node.state());
+        let grandchild_state = InjectableGameAction::Win.execute(&child_node.state());
         let grandchild_node = create_expanded_node(grandchild_state, None);
 
-        child_node.insert_child(TestGameAction::Win, grandchild_node);
-        explored_node.insert_child(TestGameAction::WinInXTurns(1), child_node);
-        root.insert_child(TestGameAction::WinInXTurns(2), explored_node);
+        child_node.insert_child(InjectableGameAction::Win, grandchild_node);
+        explored_node.insert_child(InjectableGameAction::WinInXTurns(1), child_node);
+        root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node);
         let mut tree = Tree::new(root);
 
         let path = vec![
-            TestGameAction::WinInXTurns(2),
-            TestGameAction::WinInXTurns(1),
-            TestGameAction::Win,
+            InjectableGameAction::WinInXTurns(2),
+            InjectableGameAction::WinInXTurns(1),
+            InjectableGameAction::Win,
         ];
         let owned_root = tree.root.clone();
         // Not super pleased with this here either
@@ -515,26 +515,26 @@ mod tests {
             owned_root
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(2))
+                .get_child(InjectableGameAction::WinInXTurns(2))
                 .clone(),
             owned_root
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(2))
+                .get_child(InjectableGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(1))
+                .get_child(InjectableGameAction::WinInXTurns(1))
                 .clone(),
             owned_root
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(2))
+                .get_child(InjectableGameAction::WinInXTurns(2))
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::WinInXTurns(1))
+                .get_child(InjectableGameAction::WinInXTurns(1))
                 .read()
                 .unwrap()
-                .get_child(TestGameAction::Win)
+                .get_child(InjectableGameAction::Win)
                 .clone(),
         ];
 
