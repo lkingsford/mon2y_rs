@@ -9,6 +9,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+#[cfg(not(test))]
+const RANDOM_FACTOR: f64 = 1e-6;
+#[cfg(test)]
+const RANDOM_FACTOR: f64 = 0.0;
+
 #[derive(Debug)]
 pub struct CachedUcb {
     ucb: f64,
@@ -305,19 +310,23 @@ where
                     .iter()
                     .filter_map(|(action, child_node)| {
                         let (visit_count, value_sum) = {
-                        let child_ref = child_node.clone();
-                        let child_node = child_ref.read().unwrap();
-                        if child_node.fully_explored() {
-                            log::trace!("Select short circuited - fully explored");
-                            return None;
-                        }
-                        let cached_ucb = child_node.cached_ucb(
-                            child_node.value_sum(), child_node.visit_count(), parent_visit_count);
-                        if let Some(ucb) = cached_ucb {
-                            return Some((action.clone(), ucb));
-                        }
-                        (child_node.visit_count() as f64, if game_action { 1.0 / child_node.weight() } else { child_node.value_sum()})
-                    };
+                            let child_ref = child_node.clone();
+                            let child_node = child_ref.read().unwrap();
+                            if child_node.fully_explored() {
+                                log::trace!("Select short circuited - fully explored");
+                                return None;
+                            }
+                            let cached_ucb = child_node.cached_ucb(
+                                child_node.value_sum(), child_node.visit_count(), parent_visit_count);
+                            if let Some(ucb) = cached_ucb {
+                                return Some((action.clone(), ucb));
+                            }
+                            if game_action {
+                                (child_node.visit_count() as f64 / child_node.weight(), 1.0)
+                            } else {
+                                (child_node.visit_count() as f64, child_node.value_sum())
+                            }
+                        };
                         let parent_visits = parent_visit_count as f64;
                         if visit_count == 0.0 {
                             return Some((action.clone(), f64::INFINITY));
@@ -326,7 +335,7 @@ where
                         let u: f64 = (parent_visits.ln() / visit_count).sqrt();
                         // Random used to break ties
                         // Todo: Cache the rng
-                        let r: f64 = rand::thread_rng().gen::<f64>() * 1e-6;
+                        let r: f64 = rand::thread_rng().gen::<f64>() * RANDOM_FACTOR;
                         let ucb: f64 = (q + constant * u + r);
                         trace!(
                             "UCB action: {:?}, value_sum: {}, visit_count: {}, parent_visits: {}, q: {}, u: {}, c: {} ucb: {}",
@@ -405,5 +414,147 @@ where
         cached_fully_explored: RwLock::new(None),
         game_action,
         weight,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        mon2y::tree::Tree,
+        test::injectable_game::{InjectableGameAction, InjectableGameState},
+    };
+
+    #[test]
+    fn test_create_expanded_node() {
+        let state = InjectableGameState {
+            injected_reward: vec![0.0],
+            injected_terminal: false,
+            injected_permitted_actions: vec![InjectableGameAction::Win],
+            player_count: 1,
+            next_actor: Actor::Player(0),
+        };
+        let node = create_expanded_node(state, None);
+        assert_eq!(node.visit_count(), 0);
+        assert_eq!(node.value_sum(), 0.0);
+    }
+
+    #[test]
+    fn test_best_pick_weighted_visits() {
+        // Maybe this being parameterized would be better?
+        // But, it's probably going to look messy, so this will do as a minimum check
+        // Low effort test - create a node with weight 1 and weight 2, give them unexpanded children too,
+        // check that the next pick is from the weight 2 node
+
+        let mut root_node = create_expanded_node(
+            InjectableGameState {
+                injected_reward: vec![0.0f64],
+                injected_terminal: false,
+                injected_permitted_actions: vec![],
+                player_count: 1,
+                next_actor: Actor::GameAction(vec![
+                    (InjectableGameAction::WinInXTurns(1), 1.0),
+                    (InjectableGameAction::WinInXTurns(2), 2.0),
+                ]),
+            },
+            None,
+        );
+
+        let mut win_in_x_turns_1 = create_expanded_node(
+            InjectableGameState {
+                injected_reward: vec![0.0f64],
+                injected_terminal: false,
+                injected_permitted_actions: vec![],
+                player_count: 1,
+                next_actor: Actor::Player(0),
+            },
+            Some(1.0f64),
+        );
+
+        let mut win_in_x_turns_2 = create_expanded_node(
+            InjectableGameState {
+                injected_reward: vec![0.0f64],
+                injected_terminal: false,
+                injected_permitted_actions: vec![],
+                player_count: 1,
+                next_actor: Actor::Player(0),
+            },
+            Some(2.0f64),
+        );
+
+        root_node.visit(0.0f64);
+
+        let win_in_x_turns_1_child_3 = Node::Placeholder {
+            weight: Some(3.0f64),
+        };
+        let win_in_x_turns_1_child_4 = Node::Placeholder {
+            weight: Some(4.0f64),
+        };
+        let win_in_x_turns_2_child_5 = Node::Placeholder {
+            weight: Some(5.0f64),
+        };
+        let win_in_x_turns_2_child_6 = Node::Placeholder {
+            weight: Some(6.0f64),
+        };
+        win_in_x_turns_1.insert_child(
+            InjectableGameAction::WinInXTurns(3),
+            win_in_x_turns_1_child_3,
+        );
+        win_in_x_turns_1.insert_child(
+            InjectableGameAction::WinInXTurns(4),
+            win_in_x_turns_1_child_4,
+        );
+        win_in_x_turns_2.insert_child(
+            InjectableGameAction::WinInXTurns(5),
+            win_in_x_turns_2_child_5,
+        );
+        win_in_x_turns_2.insert_child(
+            InjectableGameAction::WinInXTurns(6),
+            win_in_x_turns_2_child_6,
+        );
+        root_node.insert_child(InjectableGameAction::WinInXTurns(1), win_in_x_turns_1);
+        root_node.insert_child(InjectableGameAction::WinInXTurns(2), win_in_x_turns_2);
+
+        let locked_node = RwLock::new(root_node);
+
+        // No visits, get the weight 2 node
+        // TODO: do that. Currently, it visits the inf+ nodes in a random order.
+        // {
+        //    let best_pick = best_pick(&locked_node, 2.0_f64.sqrt());
+        //    assert_eq!(
+        //        best_pick.first().unwrap().0,
+        //        InjectableGameAction::WinInXTurns(2)
+        //    );
+        // }
+
+        {
+            let root_node_ref = locked_node.read().unwrap();
+            let child = root_node_ref.get_child(InjectableGameAction::WinInXTurns(2));
+            let mut child_write = child.write().unwrap();
+            child_write.visit(0.0f64);
+        }
+        // Weight 2 visited, weight 1 not, check that weight 1 is next
+        {
+            let best_pick = best_pick(&locked_node, 2.0_f64.sqrt());
+            assert_eq!(
+                best_pick.first().unwrap().0,
+                InjectableGameAction::WinInXTurns(1)
+            );
+        }
+
+        {
+            let root_node_ref = locked_node.read().unwrap();
+            let child = root_node_ref.get_child(InjectableGameAction::WinInXTurns(1));
+            let mut child_write = child.write().unwrap();
+            child_write.visit(0.0f64);
+        }
+
+        let best_pick = best_pick(&locked_node, 2.0_f64.sqrt());
+        // We're checking for 2 - because it's the first node from the root (and best-pick isn't
+        // iterative down the tree, selection is)
+        assert_eq!(
+            best_pick.first().unwrap().0,
+            InjectableGameAction::WinInXTurns(2)
+        );
     }
 }

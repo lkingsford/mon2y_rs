@@ -30,26 +30,30 @@ impl State for InjectableGameState {
     }
 }
 
-#[derive(Hash, Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Hash, Clone, Eq, PartialEq, Debug)]
 pub enum InjectableGameAction {
     Win,
+    Lose,
     WinInXTurns(u8),
     NextTurnInjectActionCount(u8),
+    Nothing,
+    NextTurnGameAction(Vec<InjectableGameAction>),
 }
 impl Action for InjectableGameAction {
     type StateType = InjectableGameState;
+
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
-        let next_player = if let Actor::Player(player_id) = state.next_actor() {
+        let next_actor = if let Actor::Player(player_id) = state.next_actor() {
             Actor::Player((player_id + 1) % state.player_count)
         } else {
-            panic!("Not a player")
+            Actor::Player(0)
         };
         match self {
             InjectableGameAction::NextTurnInjectActionCount(c) => InjectableGameState {
                 injected_permitted_actions: (0..*c)
                     .map(|i| InjectableGameAction::WinInXTurns(i))
                     .collect(),
-                next_actor: next_player,
+                next_actor,
                 ..state.clone()
             },
             InjectableGameAction::WinInXTurns(turns) => InjectableGameState {
@@ -60,13 +64,28 @@ impl Action for InjectableGameAction {
                         vec![InjectableGameAction::Win]
                     }
                 },
-                next_actor: next_player,
+                next_actor,
                 ..state.clone()
             },
             InjectableGameAction::Win => InjectableGameState {
                 injected_terminal: true,
                 injected_reward: vec![1.0],
-                next_actor: next_player,
+                next_actor,
+                ..state.clone()
+            },
+            InjectableGameAction::Lose => InjectableGameState {
+                injected_terminal: true,
+                injected_reward: vec![-1.0],
+                next_actor,
+                ..state.clone()
+            },
+            InjectableGameAction::Nothing => InjectableGameState {
+                next_actor,
+                ..state.clone()
+            },
+            InjectableGameAction::NextTurnGameAction(actions) => InjectableGameState {
+                injected_permitted_actions: actions.clone(),
+                next_actor,
                 ..state.clone()
             },
         }

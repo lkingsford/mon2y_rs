@@ -560,4 +560,38 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_weighted_game_action_play_out() {
+        let root_state = InjectableGameState {
+            injected_reward: vec![0.0],
+            injected_terminal: false,
+            injected_permitted_actions: vec![],
+            player_count: 1,
+            next_actor: Actor::GameAction(vec![
+                (InjectableGameAction::Win, 1.0),
+                (InjectableGameAction::Lose, 2.0),
+            ]),
+        };
+
+        let mut total_reward = 0;
+        let root = create_expanded_node(root_state.clone(), None);
+        let tree = Tree::new(root);
+
+        for _ in 0..1000 {
+            let reward = tree.play_out(root_state.clone());
+            total_reward += reward[0] as i32;
+        }
+
+        let expected_ratio = -1.0;
+        let tolerance = 0.1;
+        let actual_ratio = total_reward as f64 / 1000.0;
+
+        assert!(
+            (expected_ratio - actual_ratio).abs() < tolerance,
+            "Expected ratio: {}, but got: {}",
+            expected_ratio,
+            actual_ratio
+        );
+    }
 }
