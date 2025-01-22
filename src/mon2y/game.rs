@@ -1,7 +1,7 @@
 use super::Reward;
 use std::fmt::Debug;
 
-pub trait Action: Debug + Clone + Copy + Eq + std::hash::Hash {
+pub trait Action: Debug + Clone + Eq + std::hash::Hash {
     type StateType: State<ActionType = Self>;
     fn execute(&self, state: &Self::StateType) -> Self::StateType;
 }

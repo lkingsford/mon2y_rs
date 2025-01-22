@@ -87,6 +87,7 @@ fn run_game<G: Game>(
                     Some(PlayerType::R) => {
                         let permitted_actions = state.permitted_actions();
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
+                            .clone()
                     }
                     Some(PlayerType::M) => calculate_best_turn(
                         iterations,
@@ -123,7 +124,7 @@ fn run_game<G: Game>(
                             continue;
                         }
                         let action = match input.trim().parse::<usize>() {
-                            Ok(action) => sorted_actions[action],
+                            Ok(action) => sorted_actions[action].clone(),
                             Err(_) => {
                                 println!("Failed to parse action. Please enter a valid number.");
                                 continue;
@@ -134,7 +135,9 @@ fn run_game<G: Game>(
                     }
                 } else {
                     //TODO: Use a weighted random (because the second variable is supposed to be the weight)
-                    let action = actions[rand::thread_rng().gen_range(0..actions.len())].0;
+                    let action = actions[rand::thread_rng().gen_range(0..actions.len())]
+                        .0
+                        .clone();
                     state = action.execute(&state);
                 }
             }

@@ -78,7 +78,7 @@ where
         BestTurnPolicy::Ucb0 => {
             let picks = best_pick(&root_ref, 0.0);
             log::debug!("Action, UCB0: {:?}", picks);
-            picks[0].0
+            picks[0].0.clone()
         }
 
         BestTurnPolicy::MostVisits => {

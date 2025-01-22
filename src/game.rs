@@ -14,7 +14,7 @@ pub trait Game {
                 continue;
             }
             match input.trim().parse::<usize>() {
-                Ok(action) => return state.permitted_actions()[action],
+                Ok(action) => return state.permitted_actions()[action].clone(),
                 Err(_) => {
                     println!("Failed to parse action. Please enter a valid number.");
                     continue;

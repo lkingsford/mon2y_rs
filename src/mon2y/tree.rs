@@ -134,7 +134,7 @@ where
                         let expanded_child = {
                             let read_node = child_node.read().unwrap();
                             if let Node::Placeholder { .. } = &*read_node {
-                                Some(read_node.expansion(*action, &cur_state))
+                                Some(read_node.expansion(action.clone(), &cur_state))
                             } else {
                                 None
                             }
