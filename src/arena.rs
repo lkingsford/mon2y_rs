@@ -1,8 +1,8 @@
 //! Plays configurations of the MCTS against one another
-mod test;
 mod game;
 mod games;
 mod mon2y;
+mod test;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use clap::{Parser, ValueEnum};
@@ -60,6 +60,7 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
                     Some(PlayerSettings::Random) => {
                         let permitted_actions = state.permitted_actions();
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
+                            .clone()
                     }
                     Some(PlayerSettings::Mcts(mcts_settings)) => calculate_best_turn(
                         mcts_settings.iterations,
@@ -88,7 +89,9 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
             }
             Actor::GameAction(actions) => {
                 //TODO: Use a weighted random (because the second variable is supposed to be the weight)
-                let action = actions[rand::thread_rng().gen_range(0..actions.len())].0;
+                let action = actions[rand::thread_rng().gen_range(0..actions.len())]
+                    .0
+                    .clone();
                 state = action.execute(&state);
             }
         }

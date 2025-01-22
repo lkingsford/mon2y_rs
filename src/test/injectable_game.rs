@@ -10,7 +10,7 @@ pub struct InjectableGameState {
     pub injected_terminal: bool,
     pub injected_permitted_actions: Vec<InjectableGameAction>,
     pub player_count: u8,
-    pub next_player_id: u8,
+    pub next_actor: Actor<InjectableGameAction>,
 }
 
 impl State for InjectableGameState {
@@ -19,7 +19,7 @@ impl State for InjectableGameState {
         self.injected_permitted_actions.clone()
     }
     fn next_actor(&self) -> Actor<Self::ActionType> {
-        Actor::Player(self.next_player_id)
+        self.next_actor.clone()
     }
     fn reward(&self) -> Vec<f64> {
         return self.injected_reward.clone();
@@ -39,8 +39,8 @@ pub enum InjectableGameAction {
 impl Action for InjectableGameAction {
     type StateType = InjectableGameState;
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
-        let next_player_id = if let Actor::Player(player_id) = state.next_actor() {
-            (player_id + 1) % state.player_count
+        let next_player = if let Actor::Player(player_id) = state.next_actor() {
+            Actor::Player((player_id + 1) % state.player_count)
         } else {
             panic!("Not a player")
         };
@@ -49,7 +49,7 @@ impl Action for InjectableGameAction {
                 injected_permitted_actions: (0..*c)
                     .map(|i| InjectableGameAction::WinInXTurns(i))
                     .collect(),
-                next_player_id,
+                next_actor: next_player,
                 ..state.clone()
             },
             InjectableGameAction::WinInXTurns(turns) => InjectableGameState {
@@ -60,13 +60,13 @@ impl Action for InjectableGameAction {
                         vec![InjectableGameAction::Win]
                     }
                 },
-                next_player_id,
+                next_actor: next_player,
                 ..state.clone()
             },
             InjectableGameAction::Win => InjectableGameState {
                 injected_terminal: true,
                 injected_reward: vec![1.0],
-                next_player_id,
+                next_actor: next_player,
                 ..state.clone()
             },
         }

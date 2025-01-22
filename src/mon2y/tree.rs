@@ -253,7 +253,7 @@ mod tests {
                 InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
-            next_player_id: 0,
+            next_actor: Actor::Player(0),
         };
 
         let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
@@ -289,7 +289,7 @@ mod tests {
                 InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
-            next_player_id: 0,
+            next_actor: Actor::Player(0),
         };
 
         let mut explored_state_1 = InjectableGameAction::WinInXTurns(2).execute(&root_state);
@@ -334,7 +334,7 @@ mod tests {
                 InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
-            next_player_id: 0,
+            next_actor: Actor::Player(0),
         };
         let mut explored_state_1 = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         explored_state_1.injected_permitted_actions =
@@ -382,7 +382,7 @@ mod tests {
             injected_terminal: false,
             injected_permitted_actions: vec![InjectableGameAction::WinInXTurns(3)],
             player_count: 1,
-            next_player_id: 0,
+            next_actor: Actor::Player(0),
         };
 
         let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
@@ -403,7 +403,7 @@ mod tests {
                 InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 1,
-            next_player_id: 0,
+            next_actor: Actor::Player(0),
         };
 
         let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
@@ -482,7 +482,7 @@ mod tests {
                 InjectableGameAction::WinInXTurns(3),
             ],
             player_count: 2,
-            next_player_id: 0,
+            next_actor: Actor::Player(0),
         };
 
         let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
