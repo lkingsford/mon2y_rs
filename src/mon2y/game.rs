@@ -18,13 +18,13 @@ pub enum Actor<ActionType> {
     Player(u8),
     /// A game action is a action that the game takes (such as rolling a dice, or drawing a card), rather than a player.
     /// The value is a list of possible actions and their probabilities.
-    GameAction(Vec<(ActionType, f64)>),
+    GameAction(Vec<(ActionType, u32)>),
 }
 
 pub trait State: Clone {
     type ActionType: Action<StateType = Self>;
     fn permitted_actions(&self) -> Vec<Self::ActionType>;
-    fn possible_non_player_actions(&self) -> Vec<(Self::ActionType, f64)> {
+    fn possible_non_player_actions(&self) -> Vec<(Self::ActionType, u32)> {
         vec![]
     }
     fn next_actor(&self) -> Actor<Self::ActionType>;

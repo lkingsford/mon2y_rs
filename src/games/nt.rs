@@ -117,11 +117,11 @@ impl State for NTState {
         }
     }
 
-    fn possible_non_player_actions(&self) -> Vec<(Self::ActionType, f64)> {
+    fn possible_non_player_actions(&self) -> Vec<(Self::ActionType, u32)> {
         self.cards
             .iter()
             .filter(|(_, card_state)| matches!(card_state, CardState::Drawable))
-            .map(|(card, _)| (NTAction::Draw(*card), 1.0))
+            .map(|(card, _)| (NTAction::Draw(*card), 1))
             .collect()
     }
 

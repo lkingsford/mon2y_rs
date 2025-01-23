@@ -33,10 +33,10 @@ pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
         cached_ucb: RwLock<Option<CachedUcb>>,
         cached_fully_explored: RwLock<Option<bool>>,
         game_action: bool,
-        weight: Option<f64>,
+        weight: Option<u32>,
     },
     Placeholder {
-        weight: Option<f64>,
+        weight: Option<u32>,
     },
 }
 
@@ -97,10 +97,10 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn weight(&self) -> f64 {
+    pub fn weight(&self) -> u32 {
         match self {
-            Node::Expanded { weight, .. } => weight.unwrap_or(1.0),
-            Node::Placeholder { weight, .. } => weight.unwrap_or(1.0),
+            Node::Expanded { weight, .. } => weight.unwrap_or(1),
+            Node::Placeholder { weight, .. } => weight.unwrap_or(1),
         }
     }
 
@@ -215,7 +215,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
 
     pub fn new_expanded(
         state: StateType,
-        weight: Option<f64>,
+        weight: Option<u32>,
     ) -> Node<StateType, <StateType as State>::ActionType> {
         create_expanded_node(state, weight)
     }
@@ -322,7 +322,7 @@ where
                                 return Some((action.clone(), ucb));
                             }
                             if game_action {
-                                (child_node.visit_count() as f64 / child_node.weight(), 1.0)
+                                (child_node.visit_count() as f64 / child_node.weight() as f64, 1.0)
                             } else {
                                 (child_node.visit_count() as f64, child_node.value_sum())
                             }
@@ -369,7 +369,7 @@ where
 
 pub fn create_expanded_node<StateType>(
     state: StateType,
-    weight: Option<f64>,
+    weight: Option<u32>,
 ) -> Node<StateType, StateType::ActionType>
 where
     StateType: State,
@@ -453,8 +453,8 @@ mod tests {
                 injected_permitted_actions: vec![],
                 player_count: 1,
                 next_actor: Actor::GameAction(vec![
-                    (InjectableGameAction::WinInXTurns(1), 1.0),
-                    (InjectableGameAction::WinInXTurns(2), 2.0),
+                    (InjectableGameAction::WinInXTurns(1), 1),
+                    (InjectableGameAction::WinInXTurns(2), 2),
                 ]),
             },
             None,
@@ -468,7 +468,7 @@ mod tests {
                 player_count: 1,
                 next_actor: Actor::Player(0),
             },
-            Some(1.0f64),
+            Some(1),
         );
 
         let mut win_in_x_turns_2 = create_expanded_node(
@@ -479,23 +479,15 @@ mod tests {
                 player_count: 1,
                 next_actor: Actor::Player(0),
             },
-            Some(2.0f64),
+            Some(2),
         );
 
         root_node.visit(0.0f64);
 
-        let win_in_x_turns_1_child_3 = Node::Placeholder {
-            weight: Some(3.0f64),
-        };
-        let win_in_x_turns_1_child_4 = Node::Placeholder {
-            weight: Some(4.0f64),
-        };
-        let win_in_x_turns_2_child_5 = Node::Placeholder {
-            weight: Some(5.0f64),
-        };
-        let win_in_x_turns_2_child_6 = Node::Placeholder {
-            weight: Some(6.0f64),
-        };
+        let win_in_x_turns_1_child_3 = Node::Placeholder { weight: Some(3) };
+        let win_in_x_turns_1_child_4 = Node::Placeholder { weight: Some(4) };
+        let win_in_x_turns_2_child_5 = Node::Placeholder { weight: Some(5) };
+        let win_in_x_turns_2_child_6 = Node::Placeholder { weight: Some(6) };
         win_in_x_turns_1.insert_child(
             InjectableGameAction::WinInXTurns(3),
             win_in_x_turns_1_child_3,

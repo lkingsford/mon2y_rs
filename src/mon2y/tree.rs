@@ -1,5 +1,6 @@
 use super::game::{Action, Actor, State};
 use super::node::{create_expanded_node, Node};
+use super::weighted_random::weighted_random;
 use super::BestTurnPolicy;
 use super::Reward;
 use core::panic;
@@ -171,10 +172,8 @@ where
                     cur_state = Box::new(action.execute(&cur_state));
                 }
                 Actor::GameAction(actions) => {
-                    // TODO: Add weighted rng
-                    let term = cur_state.terminal();
-                    let action = actions[rng.gen_range(0..actions.len())].clone();
-                    cur_state = Box::new(action.0.execute(&cur_state));
+                    let action = weighted_random(actions);
+                    cur_state = Box::new(action.execute(&cur_state));
                 }
             }
         }
@@ -569,29 +568,33 @@ mod tests {
             injected_permitted_actions: vec![],
             player_count: 1,
             next_actor: Actor::GameAction(vec![
-                (InjectableGameAction::Win, 1.0),
-                (InjectableGameAction::Lose, 2.0),
+                (InjectableGameAction::Lose, 1),
+                (InjectableGameAction::Win, 2),
             ]),
         };
 
-        let mut total_reward = 0;
         let root = create_expanded_node(root_state.clone(), None);
         let tree = Tree::new(root);
 
+        let mut weight_1_visits = 0;
+        let mut weight_2_visits = 0;
         for _ in 0..1000 {
             let reward = tree.play_out(root_state.clone());
-            total_reward += reward[0] as i32;
+            if reward[0] < 0.0 {
+                weight_1_visits += 1
+            } else {
+                weight_2_visits += 1
+            };
         }
 
-        let expected_ratio = -1.0;
         let tolerance = 0.1;
-        let actual_ratio = total_reward as f64 / 1000.0;
-
+        let ratio = (weight_1_visits as f32 / weight_2_visits as f32);
         assert!(
-            (expected_ratio - actual_ratio).abs() < tolerance,
-            "Expected ratio: {}, but got: {}",
-            expected_ratio,
-            actual_ratio
+            (ratio - (1.0 / 2.0)).abs() < tolerance,
+            "Ratio was {}, expected {} +/- {}",
+            ratio,
+            1.0 / 2.0,
+            tolerance
         );
     }
 }
