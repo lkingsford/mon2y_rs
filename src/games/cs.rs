@@ -1,5 +1,5 @@
 // src/games/cs.rs
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use crate::game::Game;
@@ -67,6 +67,8 @@ impl Action for CSAction {
 pub struct CSState {
     player_turn: u8,
     deck: Vec<u8>,
+    locked_in_columns: HashSet<u8>,
+    last_roll: Option<(u8, u8, u8, u8)>,
 }
 
 impl State for CSState {
@@ -77,7 +79,59 @@ impl State for CSState {
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
-        vec![]
+        let new_column_allowed = self.locked_in_columns.len() < 3;
+        let column_allowed = HashMap::from(
+            (2..=12)
+                .map(|col| {
+                    (
+                        col,
+                        new_column_allowed || self.locked_in_columns.contains(&col),
+                    )
+                })
+                .collect::<HashMap<_, _>>(),
+        );
+
+        // This could be done more programmatically (with less repetition), but the action space is small enough
+        // that I'm not worried
+        let (d1, d2, d3, d4) = match self.last_roll {
+            Some((d1, d2, d3, d4)) => (d1, d2, d3, d4),
+            None => panic!("Dice haven't been rolled"),
+        };
+        let mut possible_actions: Vec<CSAction> = vec![CSAction::Done];
+        // 1&2/3&4
+        let d12 = d1 + d2;
+        let d34 = d3 + d4;
+        if column_allowed[&d12] && column_allowed[&d34] {
+            possible_actions.push(CSAction::Move(d12, Some(d34)));
+        } else if column_allowed[&d12] {
+            possible_actions.push(CSAction::Move(d12, None));
+        } else if column_allowed[&d34] {
+            possible_actions.push(CSAction::Move(d34, None));
+        };
+
+        // 1&3/2&4
+        let d13 = d1 + d3;
+        let d24 = d2 + d4;
+        if column_allowed[&d13] && column_allowed[&d24] {
+            possible_actions.push(CSAction::Move(d13, Some(d24)));
+        } else if column_allowed[&d13] {
+            possible_actions.push(CSAction::Move(d13, None));
+        } else if column_allowed[&d24] {
+            possible_actions.push(CSAction::Move(d24, None));
+        }
+
+        // 1&4/2&3
+        let d14 = d1 + d4;
+        let d23 = d2 + d3;
+        if column_allowed[&d14] && column_allowed[&d23] {
+            possible_actions.push(CSAction::Move(d14, Some(d23)));
+        } else if column_allowed[&d14] {
+            possible_actions.push(CSAction::Move(d14, None));
+        } else if column_allowed[&d23] {
+            possible_actions.push(CSAction::Move(d23, None));
+        }
+
+        possible_actions
     }
 
     fn reward(&self) -> Vec<f64> {
