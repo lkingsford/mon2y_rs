@@ -26,10 +26,10 @@ static COLUMNS: LazyLock<HashMap<u8, u8>> = LazyLock::new(|| {
 /// (so - 1,1,1,1 is weighted 1 - because there's only 1 way to get that combo )
 static DICE_ACTIONS: LazyLock<Vec<(CSAction, u32)>> = LazyLock::new(|| {
     let mut actions_and_weights: HashMap<CSAction, u32> = HashMap::new();
-    for d1 in 1..6 {
-        for d2 in 1..6 {
-            for d3 in 1..6 {
-                for d4 in 1..6 {
+    for d1 in 1..=6 {
+        for d2 in 1..=6 {
+            for d3 in 1..=6 {
+                for d4 in 1..=6 {
                     let mut sorted = [d1, d2, d3, d4];
                     sorted.sort_unstable();
                     let action = CSAction::DiceRoll(sorted[0], sorted[1], sorted[2], sorted[3]);
@@ -105,4 +105,32 @@ impl Game for CS {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dice_actions_weights() {
+        let test_cases = vec![
+            (CSAction::DiceRoll(1, 1, 1, 1), 1),
+            (CSAction::DiceRoll(1, 4, 4, 4), 4),
+            (CSAction::DiceRoll(1, 3, 3, 5), 12),
+            (CSAction::DiceRoll(1, 3, 4, 6), 24),
+        ];
+
+        let actions: HashMap<CSAction, u32> = HashMap::from(
+            DICE_ACTIONS
+                .iter()
+                .map(|(action, weight)| (*action, *weight))
+                .collect::<HashMap<_, _>>(),
+        );
+
+        for (action, expected_weight) in test_cases {
+            let actual_weight = actions.get((&action)).unwrap_or(&0);
+            assert_eq!(
+                *actual_weight, expected_weight,
+                "Action {:?} has weight {}, expected {}",
+                action, actual_weight, expected_weight
+            );
+        }
+    }
+}
