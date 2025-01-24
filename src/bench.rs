@@ -1,8 +1,8 @@
 //! Benchmarks mon2y_rs by just taking the first turn and timing it
-mod test;
 mod game;
 mod games;
 mod mon2y;
+mod test;
 
 use clap::Parser;
 use game::Game;
@@ -67,6 +67,13 @@ fn main() {
             Games::C4 => run_benchmark(C4, args.iterations, args.threads),
             Games::NT => run_benchmark(
                 NT {
+                    player_count: args.player_count,
+                },
+                args.iterations,
+                args.threads,
+            ),
+            Games::CS => run_benchmark(
+                CS {
                     player_count: args.player_count,
                 },
                 args.iterations,

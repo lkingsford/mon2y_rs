@@ -115,6 +115,12 @@ fn run_config(config_file: String) {
                 },
                 arena_settings.players.clone(),
             ),
+            Games::CS => run_episode(
+                CS {
+                    player_count: arena_settings.players.len() as u8,
+                },
+                arena_settings.players.clone(),
+            ),
         };
         let max_result = result
             .iter()

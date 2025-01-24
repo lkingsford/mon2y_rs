@@ -196,6 +196,20 @@ fn main() {
                     args.log_children,
                 );
             }
+            Games::CS => {
+                run_game(
+                    CS {
+                        player_count: players.len() as u8,
+                    },
+                    players.clone(),
+                    args.iterations,
+                    args.limit_time,
+                    args.threads,
+                    args.inject_game_turns,
+                    args.policy,
+                    args.exploration_constant,
+                    args.log_children,
+                );
         }
     }
 }
