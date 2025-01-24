@@ -8,13 +8,13 @@ use clap::{Parser, ValueEnum};
 use env_logger::fmt::Formatter;
 use game::Game;
 use games::Games;
-use games::{C4, NT};
+use games::{C4, CS, NT};
 use log::Record;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
+use std::io;
 use std::io::Write;
 use std::thread;
-use std::io;
 
 use rand::Rng;
 
@@ -184,6 +184,21 @@ fn main() {
             Games::NT => {
                 run_game(
                     NT {
+                        player_count: players.len() as u8,
+                    },
+                    players.clone(),
+                    args.iterations,
+                    args.limit_time,
+                    args.threads,
+                    args.inject_game_turns,
+                    args.policy,
+                    args.exploration_constant,
+                    args.log_children,
+                );
+            }
+            Games::CS => {
+                run_game(
+                    CS {
                         player_count: players.len() as u8,
                     },
                     players.clone(),
