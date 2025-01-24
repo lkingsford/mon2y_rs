@@ -58,7 +58,7 @@ impl Action for InjectableGameAction {
             },
             InjectableGameAction::WinInXTurns(turns) => InjectableGameState {
                 injected_permitted_actions: {
-                    if (*turns > 0) {
+                    if *turns > 0 {
                         vec![InjectableGameAction::WinInXTurns(turns - 1)]
                     } else {
                         vec![InjectableGameAction::Win]

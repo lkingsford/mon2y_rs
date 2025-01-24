@@ -1,12 +1,10 @@
 use super::game::{Action, Actor, State};
-use super::node::{create_expanded_node, Node};
+use super::node::Node;
 use super::weighted_random::weighted_random;
-use super::BestTurnPolicy;
 use super::Reward;
 use core::panic;
-use log::{debug, trace};
+use log::trace;
 use rand::Rng;
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, PartialEq)]
@@ -164,7 +162,7 @@ where
 
         while !cur_state.terminal() {
             match cur_state.next_actor() {
-                Actor::Player(player_id) => {
+                Actor::Player(_) => {
                     let permitted_actions = cur_state.permitted_actions();
 
                     let action: ActionType =
@@ -236,6 +234,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mon2y::node::create_expanded_node;
     use crate::test::injectable_game::{InjectableGameAction, InjectableGameState};
     use std::vec;
 
@@ -362,7 +361,7 @@ mod tests {
         ];
         let selection = Selection::Selection(selection_path.clone());
 
-        let mut tree = Tree::new(root);
+        let tree = Tree::new(root);
         tree.expansion(&selection);
         let node_path = tree.root.clone();
         let node_ref = node_path.read().unwrap().get_node_by_path(selection_path);
@@ -385,7 +384,7 @@ mod tests {
         };
 
         let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
-        let mut root = create_expanded_node(root_state, None);
+        let root = create_expanded_node(root_state, None);
         let tree = Tree::new(root);
         let reward = tree.play_out(explored_state);
 
@@ -421,7 +420,7 @@ mod tests {
         child_node.insert_child(InjectableGameAction::Win, grandchild_node);
         explored_node.insert_child(InjectableGameAction::WinInXTurns(1), child_node);
         root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node);
-        let mut tree = Tree::new(root);
+        let tree = Tree::new(root);
 
         let path = vec![
             InjectableGameAction::WinInXTurns(2),
@@ -500,7 +499,7 @@ mod tests {
         child_node.insert_child(InjectableGameAction::Win, grandchild_node);
         explored_node.insert_child(InjectableGameAction::WinInXTurns(1), child_node);
         root.insert_child(InjectableGameAction::WinInXTurns(2), explored_node);
-        let mut tree = Tree::new(root);
+        let tree = Tree::new(root);
 
         let path = vec![
             InjectableGameAction::WinInXTurns(2),
@@ -588,7 +587,7 @@ mod tests {
         }
 
         let tolerance = 0.1;
-        let ratio = (weight_1_visits as f32 / weight_2_visits as f32);
+        let ratio = weight_1_visits as f32 / weight_2_visits as f32;
         assert!(
             (ratio - (1.0 / 2.0)).abs() < tolerance,
             "Ratio was {}, expected {} +/- {}",

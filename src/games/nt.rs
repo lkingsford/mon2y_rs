@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use rand::seq::IteratorRandom;
-use rand::Rng;
 
 use crate::game::Game;
 use crate::mon2y::game::{Action, Actor, State};

@@ -1,7 +1,7 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
-use log::{debug, trace};
+use log::trace;
 
 use crate::mon2y::game::Actor;
 use crate::mon2y::tree::Selection;

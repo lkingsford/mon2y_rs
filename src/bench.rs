@@ -8,8 +8,8 @@ use clap::Parser;
 use game::Game;
 use games::Games;
 use games::{C4, NT};
-use mon2y::{calculate_best_turn, game::State, BestTurnPolicy};
-use std::time::{Duration, Instant};
+use mon2y::{calculate_best_turn, BestTurnPolicy};
+use std::time::Instant;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]

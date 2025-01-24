@@ -5,16 +5,16 @@ mod test;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
 use clap::{Parser, ValueEnum};
-use env_logger::{fmt::Formatter, Builder};
+use env_logger::fmt::Formatter;
 use game::Game;
 use games::Games;
 use games::{C4, NT};
-use log::{Level, Record};
+use log::Record;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
 use std::io::Write;
 use std::thread;
-use std::{io, vec};
+use std::io;
 
 use rand::Rng;
 

@@ -5,18 +5,18 @@ mod mon2y;
 mod test;
 
 //use crate::mon2y::action_log::{Action, ActionLogEntry};
-use clap::{Parser, ValueEnum};
-use env_logger::{fmt::Formatter, Builder};
+use clap::Parser;
+use env_logger::fmt::Formatter;
 use game::Game;
 use games::Games;
 use games::{C4, NT};
-use log::{Level, Record};
+use log::Record;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
 use rand::Rng;
 use serde::Deserialize;
 use std::io::Write;
-use std::{fs, io, thread};
+use std::{fs, thread};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]

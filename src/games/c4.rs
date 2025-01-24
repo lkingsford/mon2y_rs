@@ -183,7 +183,7 @@ impl Game for C4 {
         }
     }
 
-    fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
+    fn get_human_turn(&self, _state: &Self::StateType) -> Self::ActionType {
         let mut input = String::new();
         io::stdin()
             .read_line(&mut input)
