@@ -8,13 +8,13 @@ use clap::{Parser, ValueEnum};
 use env_logger::fmt::Formatter;
 use game::Game;
 use games::Games;
-use games::{C4, NT};
+use games::{C4, CS, NT};
 use log::Record;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
+use std::io;
 use std::io::Write;
 use std::thread;
-use std::io;
 
 use rand::Rng;
 
@@ -210,6 +210,7 @@ fn main() {
                     args.exploration_constant,
                     args.log_children,
                 );
+            }
         }
     }
 }

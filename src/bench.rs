@@ -7,7 +7,7 @@ mod test;
 use clap::Parser;
 use game::Game;
 use games::Games;
-use games::{C4, NT};
+use games::{C4, CS, NT};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
 use std::time::Instant;
 
