@@ -103,7 +103,7 @@ impl Action for CSAction {
                                 .get(&(state.next_player))
                                 .unwrap()
                                 .get(column)
-                                .unwrap()),
+                                .unwrap_or(&0)),
                         ) + 1,
                     ),
                 );
@@ -122,7 +122,7 @@ impl Action for CSAction {
                                         .get(&(state.next_player))
                                         .unwrap()
                                         .get(other_column)
-                                        .unwrap()),
+                                        .unwrap_or(&0)),
                                 )
                                 + 1,
                         ),
