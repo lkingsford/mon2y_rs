@@ -1,5 +1,6 @@
 // src/games/cs.rs
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::sync::LazyLock;
 
 use crate::game::Game;
@@ -19,6 +20,22 @@ static COLUMNS: LazyLock<HashMap<u8, u8>> = LazyLock::new(|| {
         (10, 7),
         (11, 5),
         (12, 3),
+    ])
+});
+
+static TEMPORARY_INIT: LazyLock<HashMap<u8, Option<u8>>> = LazyLock::new(|| {
+    HashMap::from([
+        (2, None),
+        (3, None),
+        (4, None),
+        (5, None),
+        (6, None),
+        (7, None),
+        (8, None),
+        (9, None),
+        (10, None),
+        (11, None),
+        (12, None),
     ])
 });
 
@@ -59,23 +76,89 @@ pub enum CSAction {
 impl Action for CSAction {
     type StateType = CSState;
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
-        todo!();
+        match self {
+            CSAction::DiceRoll(d1, d2, d3, d4) => {
+                let mut new_state = state.clone();
+                new_state.last_roll = Some((*d1, *d2, *d3, *d4));
+                if new_state.permitted_actions().len() == 1 {
+                    // Bust
+                    new_state.next_player = (state.next_player + 1) % state.positions.len() as u8;
+                    new_state.locked_in_columns.clear();
+                    new_state.temp_position = TEMPORARY_INIT.clone();
+                    new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
+                } else {
+                    new_state.next_actor = Actor::Player(new_state.next_player)
+                }
+                new_state
+            }
+            CSAction::Move(column, maybe_column) => {
+                let mut new_state = state.clone();
+                new_state.locked_in_columns.insert(*column);
+                new_state.temp_position.insert(
+                    *column,
+                    Some(
+                        new_state.temp_position.get(column).unwrap().unwrap_or(
+                            *(state
+                                .positions
+                                .get(&(state.next_player))
+                                .unwrap()
+                                .get(column)
+                                .unwrap()),
+                        ) + 1,
+                    ),
+                );
+                if let Some(other_column) = maybe_column {
+                    new_state.locked_in_columns.insert(*other_column);
+                    new_state.temp_position.insert(
+                        *other_column,
+                        Some(
+                            new_state
+                                .temp_position
+                                .get(other_column)
+                                .unwrap()
+                                .unwrap_or(
+                                    *(state
+                                        .positions
+                                        .get(&(state.next_player))
+                                        .unwrap()
+                                        .get(other_column)
+                                        .unwrap()),
+                                )
+                                + 1,
+                        ),
+                    );
+                };
+                new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
+                new_state
+            }
+            CSAction::Done => {
+                let mut new_state = state.clone();
+                todo!();
+            }
+        }
     }
 }
 
+type PlayerID = u8;
+type ColumnID = u8;
+
 #[derive(Clone, Debug)]
 pub struct CSState {
-    player_turn: u8,
-    deck: Vec<u8>,
+    next_actor: Actor<CSAction>,
+    // 2 sources of truth here :s - temp_position Nones could be used too.
     locked_in_columns: HashSet<u8>,
     last_roll: Option<(u8, u8, u8, u8)>,
+    next_player: u8,
+    positions: HashMap<PlayerID, HashMap<ColumnID, u8>>,
+    temp_position: HashMap<ColumnID, Option<u8>>,
+    claimed_columns: HashMap<ColumnID, Option<PlayerID>>,
 }
 
 impl State for CSState {
     type ActionType = CSAction;
 
     fn next_actor(&self) -> Actor<CSAction> {
-        Actor::Player(self.player_turn)
+        self.next_actor.clone()
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
@@ -85,7 +168,11 @@ impl State for CSState {
                 .map(|col| {
                     (
                         col,
-                        new_column_allowed || self.locked_in_columns.contains(&col),
+                        // It's my vanity project, and even I think this might be a little much
+                        (new_column_allowed || self.locked_in_columns.contains(&col))
+                            && self.claimed_columns.get(&col) == None
+                            && (self.temp_position[&col].is_none()
+                                || self.temp_position[&col] < COLUMNS.get(&col).copied()),
                     )
                 })
                 .collect::<HashMap<_, _>>(),
@@ -98,15 +185,16 @@ impl State for CSState {
             None => panic!("Dice haven't been rolled"),
         };
         let mut possible_actions: Vec<CSAction> = vec![CSAction::Done];
+        let mut one_match_actions: Vec<CSAction> = vec![];
         // 1&2/3&4
         let d12 = d1 + d2;
         let d34 = d3 + d4;
         if column_allowed[&d12] && column_allowed[&d34] {
             possible_actions.push(CSAction::Move(d12, Some(d34)));
         } else if column_allowed[&d12] {
-            possible_actions.push(CSAction::Move(d12, None));
+            one_match_actions.push(CSAction::Move(d12, None));
         } else if column_allowed[&d34] {
-            possible_actions.push(CSAction::Move(d34, None));
+            one_match_actions.push(CSAction::Move(d34, None));
         };
 
         // 1&3/2&4
@@ -115,9 +203,9 @@ impl State for CSState {
         if column_allowed[&d13] && column_allowed[&d24] {
             possible_actions.push(CSAction::Move(d13, Some(d24)));
         } else if column_allowed[&d13] {
-            possible_actions.push(CSAction::Move(d13, None));
+            one_match_actions.push(CSAction::Move(d13, None));
         } else if column_allowed[&d24] {
-            possible_actions.push(CSAction::Move(d24, None));
+            one_match_actions.push(CSAction::Move(d24, None));
         }
 
         // 1&4/2&3
@@ -126,9 +214,14 @@ impl State for CSState {
         if column_allowed[&d14] && column_allowed[&d23] {
             possible_actions.push(CSAction::Move(d14, Some(d23)));
         } else if column_allowed[&d14] {
-            possible_actions.push(CSAction::Move(d14, None));
+            one_match_actions.push(CSAction::Move(d14, None));
         } else if column_allowed[&d23] {
-            possible_actions.push(CSAction::Move(d23, None));
+            one_match_actions.push(CSAction::Move(d23, None));
+        }
+
+        if possible_actions.len() == 1 {
+            // Only do the 'single actions' if there's no double actions
+            possible_actions.extend(one_match_actions.iter());
         }
 
         possible_actions
@@ -139,7 +232,7 @@ impl State for CSState {
     }
 
     fn terminal(&self) -> bool {
-        self.deck.is_empty()
+        todo!()
     }
 }
 
