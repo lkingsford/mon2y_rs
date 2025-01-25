@@ -133,7 +133,26 @@ impl Action for CSAction {
             }
             CSAction::Done => {
                 let mut new_state = state.clone();
-                todo!();
+                for (column, temp_position) in new_state.temp_position.iter() {
+                    if let Some(position) = temp_position {
+                        *new_state
+                            .positions
+                            .get_mut(&(new_state.next_player))
+                            .unwrap()
+                            .get_mut(column)
+                            .unwrap() = *position;
+                        if position >= COLUMNS.get(column).unwrap() {
+                            new_state
+                                .claimed_columns
+                                .insert(*column, Some(state.next_player));
+                        };
+                    }
+                }
+                new_state.next_player = (state.next_player + 1) % state.positions.len() as u8;
+                new_state.locked_in_columns.clear();
+                new_state.temp_position = TEMPORARY_INIT.clone();
+                new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
+                new_state
             }
         }
     }
@@ -152,6 +171,18 @@ pub struct CSState {
     positions: HashMap<PlayerID, HashMap<ColumnID, u8>>,
     temp_position: HashMap<ColumnID, Option<u8>>,
     claimed_columns: HashMap<ColumnID, Option<PlayerID>>,
+}
+
+impl CSState {
+    fn player_claimed_count(&self) -> HashMap<u8, i32> {
+        self.claimed_columns.values().filter_map(|&v| v).fold(
+            HashMap::new(),
+            |mut acc, player_id| {
+                *acc.entry(player_id).or_insert(0) += 1;
+                acc
+            },
+        )
+    }
 }
 
 impl State for CSState {
@@ -228,11 +259,27 @@ impl State for CSState {
     }
 
     fn reward(&self) -> Vec<f64> {
-        todo!()
+        if !self.terminal() {
+            vec![0.0f64; self.positions.len()]
+        } else {
+            let counts = self.player_claimed_count();
+            let max_count = *counts.values().max().unwrap();
+            (0..self.positions.len() as u8)
+                .map(|player_id| {
+                    if counts.get(&player_id) == Some(&max_count) {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                })
+                .collect()
+        }
     }
 
     fn terminal(&self) -> bool {
-        todo!()
+        self.player_claimed_count()
+            .values()
+            .any(|&count| count >= 3)
     }
 }
 
