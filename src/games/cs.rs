@@ -168,7 +168,7 @@ pub struct CSState {
     locked_in_columns: HashSet<u8>,
     last_roll: Option<(u8, u8, u8, u8)>,
     next_player: u8,
-    positions: HashMap<PlayerID, HashMap<ColumnID, u8>>,
+    positions: HashMap<PlayerID, HashMap<ColumnID, u8>>, // Maybe this should be 1 hashmap with a tuple key?
     temp_position: HashMap<ColumnID, Option<u8>>,
     claimed_columns: HashMap<ColumnID, Option<PlayerID>>,
 }
@@ -292,7 +292,21 @@ impl Game for CS {
     type ActionType = CSAction;
 
     fn init_game(&self) -> Self::StateType {
-        todo!()
+        let positions: HashMap<u8, HashMap<u8, u8>> = (0..self.player_count)
+            .map(|player_id| {
+                let inner_map = HashMap::from([(2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0)]);
+                (player_id, inner_map)
+            })
+            .collect();
+        CSState {
+            positions,
+            claimed_columns: HashMap::new(),
+            locked_in_columns: HashSet::new(),
+            temp_position: TEMPORARY_INIT.clone(),
+            last_roll: None,
+            next_actor: Actor::GameAction(DICE_ACTIONS.clone()),
+            next_player: 0,
+        }
     }
 
     fn visualise_state(&self, _state: &Self::StateType) {}
