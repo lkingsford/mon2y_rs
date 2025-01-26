@@ -194,6 +194,7 @@ impl State for CSState {
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
         let new_column_allowed = self.locked_in_columns.len() < 3;
+        let two_new_columns_allowed = self.locked_in_columns.len() < 2;
         let column_allowed = HashMap::from(
             (2..=12)
                 .map(|col| {
@@ -220,7 +221,12 @@ impl State for CSState {
         // 1&2/3&4
         let d12 = d1 + d2;
         let d34 = d3 + d4;
-        if column_allowed[&d12] && column_allowed[&d34] {
+        if column_allowed[&d12]
+            && column_allowed[&d34]
+            && (two_new_columns_allowed
+                || self.locked_in_columns.contains(&d12)
+                || self.locked_in_columns.contains(&d34))
+        {
             possible_actions.push(CSAction::Move(d12, Some(d34)));
         } else if column_allowed[&d12] {
             one_match_actions.push(CSAction::Move(d12, None));
@@ -231,7 +237,12 @@ impl State for CSState {
         // 1&3/2&4
         let d13 = d1 + d3;
         let d24 = d2 + d4;
-        if column_allowed[&d13] && column_allowed[&d24] {
+        if column_allowed[&d13]
+            && column_allowed[&d24]
+            && (two_new_columns_allowed
+                || self.locked_in_columns.contains(&d13)
+                || self.locked_in_columns.contains(&d24))
+        {
             possible_actions.push(CSAction::Move(d13, Some(d24)));
         } else if column_allowed[&d13] {
             one_match_actions.push(CSAction::Move(d13, None));
@@ -242,7 +253,13 @@ impl State for CSState {
         // 1&4/2&3
         let d14 = d1 + d4;
         let d23 = d2 + d3;
-        if column_allowed[&d14] && column_allowed[&d23] {
+        if column_allowed[&d14]
+            && column_allowed[&d23]
+            && column_allowed[&d24]
+            && (two_new_columns_allowed
+                || self.locked_in_columns.contains(&d14)
+                || self.locked_in_columns.contains(&d23))
+        {
             possible_actions.push(CSAction::Move(d14, Some(d23)));
         } else if column_allowed[&d14] {
             one_match_actions.push(CSAction::Move(d14, None));
