@@ -272,13 +272,7 @@ impl State for CSState {
             // Only do the 'single actions' if there's no double actions
             possible_actions.extend(one_match_actions.iter());
         }
-
-        // Remove duplicate actions (which is why they're sorted when there's 2)
-        let unique_actions: HashSet<CSAction> =
-            HashSet::from_iter(possible_actions.iter().cloned());
-
-        let possible_actions = unique_actions.iter().map(|a| *a).collect();
-
+        // TODO: Remove duplicates
         possible_actions
     }
 
