@@ -1,4 +1,5 @@
 // src/games/cs.rs
+use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::LazyLock;
@@ -227,7 +228,7 @@ impl State for CSState {
                 || self.locked_in_columns.contains(&d12)
                 || self.locked_in_columns.contains(&d34))
         {
-            possible_actions.push(CSAction::Move(d12, Some(d34)));
+            possible_actions.push(CSAction::Move(min(d12, d34), Some(max(d12, d34))));
         } else if column_allowed[&d12] {
             one_match_actions.push(CSAction::Move(d12, None));
         } else if column_allowed[&d34] {
@@ -243,7 +244,7 @@ impl State for CSState {
                 || self.locked_in_columns.contains(&d13)
                 || self.locked_in_columns.contains(&d24))
         {
-            possible_actions.push(CSAction::Move(d13, Some(d24)));
+            possible_actions.push(CSAction::Move(min(d13, d24), Some(max(d13, d24))));
         } else if column_allowed[&d13] {
             one_match_actions.push(CSAction::Move(d13, None));
         } else if column_allowed[&d24] {
@@ -260,7 +261,7 @@ impl State for CSState {
                 || self.locked_in_columns.contains(&d14)
                 || self.locked_in_columns.contains(&d23))
         {
-            possible_actions.push(CSAction::Move(d14, Some(d23)));
+            possible_actions.push(CSAction::Move(min(d14, d23), Some(max(d14, d23))));
         } else if column_allowed[&d14] {
             one_match_actions.push(CSAction::Move(d14, None));
         } else if column_allowed[&d23] {
@@ -271,6 +272,12 @@ impl State for CSState {
             // Only do the 'single actions' if there's no double actions
             possible_actions.extend(one_match_actions.iter());
         }
+
+        // Remove duplicate actions (which is why they're sorted when there's 2)
+        let unique_actions: HashSet<CSAction> =
+            HashSet::from_iter(possible_actions.iter().cloned());
+
+        let possible_actions = unique_actions.iter().map(|a| *a).collect();
 
         possible_actions
     }
