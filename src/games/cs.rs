@@ -1,4 +1,5 @@
 // src/games/cs.rs
+use linked_hash_set::LinkedHashSet;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -272,8 +273,12 @@ impl State for CSState {
             // Only do the 'single actions' if there's no double actions
             possible_actions.extend(one_match_actions.iter());
         }
-        // TODO: Remove duplicates
-        possible_actions
+
+        // Remove duplicate actions (which is why they're sorted when there's 2)
+        let unique_actions: LinkedHashSet<CSAction> =
+            LinkedHashSet::from_iter(possible_actions.iter().cloned());
+
+        unique_actions.iter().map(|a| *a).collect()
     }
 
     fn reward(&self) -> Vec<f64> {
