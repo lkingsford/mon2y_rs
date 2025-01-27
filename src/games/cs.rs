@@ -72,6 +72,7 @@ static DICE_ACTIONS: LazyLock<Vec<(CSAction, u32)>> = LazyLock::new(|| {
 pub enum CSAction {
     DiceRoll(u8, u8, u8, u8),
     Move(u8, Option<u8>),
+    Roll,
     Done,
 }
 
@@ -82,14 +83,14 @@ impl Action for CSAction {
             CSAction::DiceRoll(d1, d2, d3, d4) => {
                 let mut new_state = state.clone();
                 new_state.last_roll = Some((*d1, *d2, *d3, *d4));
-                if new_state.permitted_actions().len() == 1 {
+                if new_state.permitted_actions().len() == 0 {
                     // Bust
                     new_state.next_player = (state.next_player + 1) % state.positions.len() as u8;
                     new_state.locked_in_columns.clear();
                     new_state.temp_position = TEMPORARY_INIT.clone();
                     new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
                 } else {
-                    new_state.next_actor = Actor::Player(new_state.next_player)
+                    new_state.next_actor = Actor::Player(new_state.next_player);
                 }
                 new_state
             }
@@ -130,6 +131,11 @@ impl Action for CSAction {
                         ),
                     );
                 };
+                new_state.last_roll = None;
+                new_state
+            }
+            CSAction::Roll => {
+                let mut new_state = state.clone();
                 new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
                 new_state
             }
@@ -195,6 +201,10 @@ impl State for CSState {
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
+        if self.last_roll.is_none() {
+            return vec![CSAction::Roll, CSAction::Done];
+        }
+
         let new_column_allowed = self.locked_in_columns.len() < 3;
         let two_new_columns_allowed = self.locked_in_columns.len() < 2;
         let column_allowed = HashMap::from(
@@ -218,7 +228,7 @@ impl State for CSState {
             Some((d1, d2, d3, d4)) => (d1, d2, d3, d4),
             None => panic!("Dice haven't been rolled"),
         };
-        let mut possible_actions: Vec<CSAction> = vec![CSAction::Done];
+        let mut possible_actions: Vec<CSAction> = vec![];
         let mut one_match_actions: Vec<CSAction> = vec![];
         // 1&2/3&4
         let d12 = d1 + d2;

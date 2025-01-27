@@ -138,6 +138,7 @@ fn run_game<G: Game>(
                     let action = actions[rand::thread_rng().gen_range(0..actions.len())]
                         .0
                         .clone();
+                    log::info!("Game Action {:?}", action);
                     state = action.execute(&state);
                 }
             }
