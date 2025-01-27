@@ -25,20 +25,10 @@ static COLUMNS: LazyLock<HashMap<u8, u8>> = LazyLock::new(|| {
     ])
 });
 
-static TEMPORARY_INIT: LazyLock<HashMap<u8, Option<u8>>> = LazyLock::new(|| {
-    HashMap::from([
-        (2, None),
-        (3, None),
-        (4, None),
-        (5, None),
-        (6, None),
-        (7, None),
-        (8, None),
-        (9, None),
-        (10, None),
-        (11, None),
-        (12, None),
-    ])
+static TEMPORARY_INIT: LazyLock<[Option<u8>; 11]> = LazyLock::new(|| {
+    [
+        None, None, None, None, None, None, None, None, None, None, None,
+    ]
 });
 
 /// List of all dice actions from 4 d6s with weights
@@ -97,39 +87,28 @@ impl Action for CSAction {
             CSAction::Move(column, maybe_column) => {
                 let mut new_state = state.clone();
                 new_state.locked_in_columns.insert(*column);
-                new_state.temp_position.insert(
-                    *column,
-                    Some(
-                        new_state.temp_position.get(column).unwrap().unwrap_or(
+                new_state.temp_position[*column as usize - 2] = Some(
+                    new_state.temp_position[*column as usize - 2].unwrap_or(
+                        *(state
+                            .positions
+                            .get(&(state.next_player))
+                            .unwrap()
+                            .get(column)
+                            .unwrap_or(&0)),
+                    ) + 1,
+                );
+                if let Some(other_column) = maybe_column {
+                    new_state.locked_in_columns.insert(*other_column);
+                    new_state.temp_position[*other_column as usize - 2] = Some(
+                        new_state.temp_position[*other_column as usize - 2].unwrap_or(
                             *(state
                                 .positions
                                 .get(&(state.next_player))
                                 .unwrap()
-                                .get(column)
+                                .get(other_column)
                                 .unwrap_or(&0)),
                         ) + 1,
-                    ),
-                );
-                if let Some(other_column) = maybe_column {
-                    new_state.locked_in_columns.insert(*other_column);
-                    new_state.temp_position.insert(
-                        *other_column,
-                        Some(
-                            new_state
-                                .temp_position
-                                .get(other_column)
-                                .unwrap()
-                                .unwrap_or(
-                                    *(state
-                                        .positions
-                                        .get(&(state.next_player))
-                                        .unwrap()
-                                        .get(other_column)
-                                        .unwrap_or(&0)),
-                                )
-                                + 1,
-                        ),
-                    );
+                    )
                 };
                 new_state.last_roll = None;
                 new_state
@@ -141,18 +120,20 @@ impl Action for CSAction {
             }
             CSAction::Done => {
                 let mut new_state = state.clone();
-                for (column, temp_position) in new_state.temp_position.iter() {
+
+                for (index, temp_position) in state.temp_position.iter().enumerate() {
+                    let column = (index + 2) as u8;
                     if let Some(position) = temp_position {
                         *new_state
                             .positions
                             .get_mut(&(new_state.next_player))
                             .unwrap()
-                            .get_mut(column)
+                            .get_mut(&column)
                             .unwrap() = *position;
-                        if position >= COLUMNS.get(column).unwrap() {
+                        if position >= COLUMNS.get(&column).unwrap() {
                             new_state
                                 .claimed_columns
-                                .insert(*column, Some(state.next_player));
+                                .insert(column, Some(state.next_player));
                         };
                     }
                 }
@@ -177,7 +158,7 @@ pub struct CSState {
     last_roll: Option<(u8, u8, u8, u8)>,
     next_player: u8,
     positions: HashMap<PlayerID, HashMap<ColumnID, u8>>, // Maybe this should be 1 hashmap with a tuple key?
-    temp_position: HashMap<ColumnID, Option<u8>>,
+    temp_position: [Option<u8>; 11],
     claimed_columns: HashMap<ColumnID, Option<PlayerID>>,
 }
 
@@ -215,8 +196,9 @@ impl State for CSState {
                         // It's my vanity project, and even I think this might be a little much
                         (new_column_allowed || self.locked_in_columns.contains(&col))
                             && self.claimed_columns.get(&col) == None
-                            && (self.temp_position[&col].is_none()
-                                || self.temp_position[&col] < COLUMNS.get(&col).copied()),
+                            && (self.temp_position[col as usize - 2].is_none()
+                                || self.temp_position[col as usize - 2]
+                                    < COLUMNS.get(&col).copied()),
                     )
                 })
                 .collect::<HashMap<_, _>>(),
@@ -363,9 +345,13 @@ impl Game for CS {
             sorted_positions.sort_by_key(|(k, _)| *k);
             println!("Player {}: {:?}", i, sorted_positions);
         }
-        let mut sorted_temp_positions = state.temp_position.iter().collect::<Vec<_>>();
-        sorted_temp_positions.sort_by_key(|(k, _)| *k);
-        println!("Temporary: {:?}", sorted_temp_positions);
+        print!("Temporary: ");
+        for (index, value) in state.temp_position.iter().enumerate() {
+            if let Some(v) = value {
+                print!("{}: {}, ", index + 2, v);
+            }
+        }
+        println!();
         println!("Player: {:?}", state.next_player);
         println!("Locked in: {:?}", state.locked_in_columns);
     }
