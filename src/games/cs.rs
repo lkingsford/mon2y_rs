@@ -78,7 +78,7 @@ impl Action for CSAction {
                     new_state.next_player = (state.next_player + 1) % state.positions.len() as u8;
                     new_state.locked_in_columns.clear();
                     new_state.temp_position = TEMPORARY_INIT.clone();
-                    new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
+                    new_state.next_actor = Actor::GameAction(DICE_ACTIONS.to_vec());
                 } else {
                     new_state.next_actor = Actor::Player(new_state.next_player);
                 }
