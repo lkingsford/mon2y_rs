@@ -250,7 +250,7 @@ impl State for CSState {
             one_match_actions.push(CSAction::Move(d23, None));
         }
 
-        if possible_actions.len() == 1 {
+        if possible_actions.len() == 0 {
             // Only do the 'single actions' if there's no double actions
             possible_actions.extend(one_match_actions.iter());
         }
