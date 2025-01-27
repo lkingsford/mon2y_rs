@@ -25,11 +25,13 @@ static COLUMNS: LazyLock<HashMap<u8, u8>> = LazyLock::new(|| {
     ])
 });
 
-static TEMPORARY_INIT: LazyLock<[Option<u8>; 11]> = LazyLock::new(|| {
+static TEMPORARY_INIT: LazyLock<[Option<u8>; COLUMN_COUNT]> = LazyLock::new(|| {
     [
         None, None, None, None, None, None, None, None, None, None, None,
     ]
 });
+
+const COLUMN_COUNT: usize = 11;
 
 /// List of all dice actions from 4 d6s with weights
 /// (so - 1,1,1,1 is weighted 1 - because there's only 1 way to get that combo )
@@ -75,7 +77,7 @@ impl Action for CSAction {
                 new_state.last_roll = Some((*d1, *d2, *d3, *d4));
                 if new_state.permitted_actions().len() == 0 {
                     // Bust
-                    new_state.next_player = (state.next_player + 1) % state.positions.len() as u8;
+                    new_state.next_player = (state.next_player + 1) % new_state.player_count;
                     new_state.locked_in_columns.clear();
                     new_state.temp_position = TEMPORARY_INIT.clone();
                     new_state.next_actor = Actor::GameAction(DICE_ACTIONS.to_vec());
@@ -89,24 +91,14 @@ impl Action for CSAction {
                 new_state.locked_in_columns.insert(*column);
                 new_state.temp_position[*column as usize - 2] = Some(
                     new_state.temp_position[*column as usize - 2].unwrap_or(
-                        *(state
-                            .positions
-                            .get(&(state.next_player))
-                            .unwrap()
-                            .get(column)
-                            .unwrap_or(&0)),
+                        state.positions[state.next_player as usize][*column as usize - 2],
                     ) + 1,
                 );
                 if let Some(other_column) = maybe_column {
                     new_state.locked_in_columns.insert(*other_column);
                     new_state.temp_position[*other_column as usize - 2] = Some(
                         new_state.temp_position[*other_column as usize - 2].unwrap_or(
-                            *(state
-                                .positions
-                                .get(&(state.next_player))
-                                .unwrap()
-                                .get(other_column)
-                                .unwrap_or(&0)),
+                            state.positions[state.next_player as usize][*other_column as usize - 2],
                         ) + 1,
                     )
                 };
@@ -124,12 +116,8 @@ impl Action for CSAction {
                 for (index, temp_position) in state.temp_position.iter().enumerate() {
                     let column = (index + 2) as u8;
                     if let Some(position) = temp_position {
-                        *new_state
-                            .positions
-                            .get_mut(&(new_state.next_player))
-                            .unwrap()
-                            .get_mut(&column)
-                            .unwrap() = *position;
+                        new_state.positions[new_state.next_player as usize][column as usize - 2] =
+                            *position;
                         if position >= COLUMNS.get(&column).unwrap() {
                             new_state
                                 .claimed_columns
@@ -137,7 +125,7 @@ impl Action for CSAction {
                         };
                     }
                 }
-                new_state.next_player = (state.next_player + 1) % state.positions.len() as u8;
+                new_state.next_player = (state.next_player + 1) % new_state.player_count;
                 new_state.locked_in_columns.clear();
                 new_state.temp_position = TEMPORARY_INIT.clone();
                 new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
@@ -157,9 +145,10 @@ pub struct CSState {
     locked_in_columns: HashSet<u8>,
     last_roll: Option<(u8, u8, u8, u8)>,
     next_player: u8,
-    positions: HashMap<PlayerID, HashMap<ColumnID, u8>>, // Maybe this should be 1 hashmap with a tuple key?
-    temp_position: [Option<u8>; 11],
+    positions: Vec<[u8; COLUMN_COUNT]>, // Maybe this should be 1 hashmap with a tuple key?
+    temp_position: [Option<u8>; COLUMN_COUNT],
     claimed_columns: HashMap<ColumnID, Option<PlayerID>>,
+    player_count: u8,
 }
 
 impl CSState {
@@ -307,24 +296,8 @@ impl Game for CS {
     type ActionType = CSAction;
 
     fn init_game(&self) -> Self::StateType {
-        let positions: HashMap<u8, HashMap<u8, u8>> = (0..self.player_count)
-            .map(|player_id| {
-                let inner_map = HashMap::from([
-                    (2, 0),
-                    (3, 0),
-                    (4, 0),
-                    (5, 0),
-                    (6, 0),
-                    (7, 0),
-                    (8, 0),
-                    (9, 0),
-                    (10, 0),
-                    (11, 0),
-                    (12, 0),
-                ]);
-                (player_id, inner_map)
-            })
-            .collect();
+        let positions: Vec<[u8; COLUMN_COUNT]> =
+            (0..self.player_count).map(|_| [0; COLUMN_COUNT]).collect();
         CSState {
             positions,
             claimed_columns: HashMap::new(),
@@ -333,6 +306,7 @@ impl Game for CS {
             last_roll: None,
             next_actor: Actor::GameAction(DICE_ACTIONS.clone()),
             next_player: 0,
+            player_count: self.player_count,
         }
     }
 
@@ -341,9 +315,11 @@ impl Game for CS {
         println!("Claimed: {:?}", state.claimed_columns);
         println!("Positions:");
         for i in 0..self.player_count {
-            let mut sorted_positions = state.positions.get(&i).unwrap().iter().collect::<Vec<_>>();
-            sorted_positions.sort_by_key(|(k, _)| *k);
-            println!("Player {}: {:?}", i, sorted_positions);
+            print!("Player {}: ", i);
+            for (index, value) in state.positions[i as usize].iter().enumerate() {
+                print!("{}: {:?}, ", index + 2, value);
+            }
+            println!();
         }
         print!("Temporary: ");
         for (index, value) in state.temp_position.iter().enumerate() {
