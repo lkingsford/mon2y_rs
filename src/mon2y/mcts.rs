@@ -31,6 +31,13 @@ where
 {
     log::debug!("Starting next turn");
     let root_node = create_expanded_node(state, None);
+    if let Node::Expanded { children, .. } = &root_node {
+        if children.len() == 1 {
+            log::debug!("Short circuited - only one option");
+            return children.keys().next().unwrap().clone();
+        }
+    }
+
     let tree = Arc::new(Tree::new_with_constant(root_node, exploration_constant));
     let mut threads = vec![];
 

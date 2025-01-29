@@ -9,7 +9,7 @@ use clap::Parser;
 use env_logger::fmt::Formatter;
 use game::Game;
 use games::Games;
-use games::{C4, CS, NT};
+use games::{C4, CS, EBR, NT};
 use log::Record;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
@@ -117,6 +117,12 @@ fn run_config(config_file: String) {
             ),
             Games::CS => run_episode(
                 CS {
+                    player_count: arena_settings.players.len() as u8,
+                },
+                arena_settings.players.clone(),
+            ),
+            Games::EBR => run_episode(
+                EBR {
                     player_count: arena_settings.players.len() as u8,
                 },
                 arena_settings.players.clone(),
