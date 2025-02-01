@@ -6,6 +6,15 @@ use std::sync::LazyLock;
 
 use crate::game::Game;
 use crate::mon2y::game::{Action, Actor, State};
+
+/*
+OK - here's the deal. This is to help me playtest something.
+It's a lot quicker for me to shove the data directly in the
+source file, though I know it would be better for it to be in
+data files. It's serving its purpose, and it doesn't need to
+be built for maintainability.
+*/
+
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 enum Terrain {
     Nothing(CommonAttributes),
@@ -31,6 +40,112 @@ enum FeatureType {
     Water1,
     Water2,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Company {
+    EBRC,
+    LW,
+    TMLC,
+    GT,
+    NMFT,
+    NED,
+    MLM,
+}
+
+const IPO_ORDER: [Company; 4] = [Company::LW, Company::TMLC, Company::EBRC, Company::GT];
+
+struct CompanyFixedDetails {
+    starting: Option<Coordinate>,
+    private: bool,
+    stock_available: u32,
+    track_available: u32,
+    initial_treasury: u32,
+    initial_interest: u32,
+}
+
+type Coordinate = (usize, usize);
+
+static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyDetails>> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    m.insert(
+        Company::EBRC,
+        CompanyFixedDetails {
+            starting: Some((3, 5)),
+            private: false,
+            stock_available: 5,
+            track_available: 10,
+            initial_treasury: 0,
+            initial_interest: 0,
+        },
+    );
+    m.insert(
+        Company::LW,
+        CompanyFixedDetails {
+            starting: Some((9, 4)),
+            private: false,
+            stock_available: 3,
+            track_available: 10,
+            initial_treasury: 0,
+            initial_interest: 0,
+        },
+    );
+    m.insert(
+        Company::TMLC,
+        CompanyFixedDetails {
+            starting: Some((9, 4)),
+            private: false,
+            stock_available: 4,
+            track_available: 10,
+            initial_treasury: 0,
+            initial_interest: 0,
+        },
+    );
+    m.insert(
+        Company::GT,
+        CompanyFixedDetails {
+            starting: Some((2, 4)),
+            private: true,
+            stock_available: 1,
+            track_available: 0,
+            initial_treasury: 10,
+            initial_interest: 2,
+        },
+    );
+    m.insert(
+        Company::NMFT,
+        CompanyFixedDetails {
+            starting: None,
+            private: true,
+            stock_available: 1,
+            track_available: 0,
+            initial_treasury: 0,
+            initial_interest: 0,
+        },
+    );
+    m.insert(
+        Company::NED,
+        CompanyFixedDetails {
+            starting: None,
+            private: true,
+            stock_available: 1,
+            track_available: 0,
+            initial_treasury: 15,
+            initial_interest: 3,
+        },
+    );
+    m.insert(
+        Company::MLM,
+        CompanyFixedDetails {
+            starting: None,
+            private: true,
+            stock_available: 1,
+            track_available: 0,
+            initial_treasury: 20,
+            initial_interest: 5,
+        },
+    );
+    m
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct CommonAttributes {
