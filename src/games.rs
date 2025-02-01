@@ -1,9 +1,11 @@
 pub mod c4;
 pub mod cs;
+pub mod ebr;
 pub mod nt;
 
 pub use c4::C4;
 pub use cs::CS;
+pub use ebr::EBR;
 pub use nt::NT;
 
 use clap::ValueEnum;
@@ -14,4 +16,5 @@ pub enum Games {
     C4,
     NT,
     CS,
+    EBR,
 }
