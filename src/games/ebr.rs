@@ -15,6 +15,83 @@ data files. It's serving its purpose, and it doesn't need to
 be built for maintainability.
 */
 
+enum EndGameReason {
+    Shares,
+    Bonds,
+    Track,
+    Resources,
+}
+
+enum ChoosableAction {
+    BuildTrack,
+    AuctionShare,
+    TakeResources,
+    IssueBond,
+    Merge,
+    PayDividend,
+}
+
+const ACTION_CUBE_SPACES: [ChoosableAction; 11] = [
+    ChoosableAction::BuildTrack,
+    ChoosableAction::BuildTrack,
+    ChoosableAction::BuildTrack,
+    ChoosableAction::AuctionShare,
+    ChoosableAction::AuctionShare,
+    ChoosableAction::TakeResources,
+    ChoosableAction::TakeResources,
+    ChoosableAction::TakeResources,
+    ChoosableAction::IssueBond,
+    ChoosableAction::Merge,
+    ChoosableAction::PayDividend,
+];
+
+const ACTION_CUBE_STARTING_SPACE_INDEXES: [usize; 4] = [5, 6, 7, 10];
+
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
+struct Bond {
+    face_value: u32,
+    interest: u32,
+}
+const BONDS: [Bond; 7] = [
+    Bond {
+        face_value: 5,
+        interest: 1,
+    },
+    Bond {
+        face_value: 5,
+        interest: 1,
+    },
+    Bond {
+        face_value: 10,
+        interest: 3,
+    },
+    Bond {
+        face_value: 10,
+        interest: 3,
+    },
+    Bond {
+        face_value: 10,
+        interest: 4,
+    },
+    Bond {
+        face_value: 15,
+        interest: 4,
+    },
+    Bond {
+        face_value: 15,
+        interest: 5,
+    },
+];
+
+static INITIAL_CASH: LazyLock<HashMap<u8, u32>> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    m.insert(2, 20);
+    m.insert(3, 13);
+    m.insert(4, 10);
+    m.insert(5, 8);
+    m
+});
+
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 enum Terrain {
     Nothing(CommonAttributes),
@@ -65,93 +142,95 @@ struct CompanyFixedDetails {
 
 type Coordinate = (usize, usize);
 
-static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyDetails>> = LazyLock::new(|| {
-    let mut m = HashMap::new();
-    m.insert(
-        Company::EBRC,
-        CompanyFixedDetails {
-            starting: Some((3, 5)),
-            private: false,
-            stock_available: 5,
-            track_available: 10,
-            initial_treasury: 0,
-            initial_interest: 0,
-        },
-    );
-    m.insert(
-        Company::LW,
-        CompanyFixedDetails {
-            starting: Some((9, 4)),
-            private: false,
-            stock_available: 3,
-            track_available: 10,
-            initial_treasury: 0,
-            initial_interest: 0,
-        },
-    );
-    m.insert(
-        Company::TMLC,
-        CompanyFixedDetails {
-            starting: Some((9, 4)),
-            private: false,
-            stock_available: 4,
-            track_available: 10,
-            initial_treasury: 0,
-            initial_interest: 0,
-        },
-    );
-    m.insert(
-        Company::GT,
-        CompanyFixedDetails {
-            starting: Some((2, 4)),
-            private: true,
-            stock_available: 1,
-            track_available: 0,
-            initial_treasury: 10,
-            initial_interest: 2,
-        },
-    );
-    m.insert(
-        Company::NMFT,
-        CompanyFixedDetails {
-            starting: None,
-            private: true,
-            stock_available: 1,
-            track_available: 0,
-            initial_treasury: 0,
-            initial_interest: 0,
-        },
-    );
-    m.insert(
-        Company::NED,
-        CompanyFixedDetails {
-            starting: None,
-            private: true,
-            stock_available: 1,
-            track_available: 0,
-            initial_treasury: 15,
-            initial_interest: 3,
-        },
-    );
-    m.insert(
-        Company::MLM,
-        CompanyFixedDetails {
-            starting: None,
-            private: true,
-            stock_available: 1,
-            track_available: 0,
-            initial_treasury: 20,
-            initial_interest: 5,
-        },
-    );
-    m
-});
+static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
+    LazyLock::new(|| {
+        let mut m = HashMap::new();
+        m.insert(
+            Company::EBRC,
+            CompanyFixedDetails {
+                starting: Some((3, 5)),
+                private: false,
+                stock_available: 5,
+                track_available: 10,
+                initial_treasury: 0,
+                initial_interest: 0,
+            },
+        );
+        m.insert(
+            Company::LW,
+            CompanyFixedDetails {
+                starting: Some((9, 4)),
+                private: false,
+                stock_available: 3,
+                track_available: 10,
+                initial_treasury: 0,
+                initial_interest: 0,
+            },
+        );
+        m.insert(
+            Company::TMLC,
+            CompanyFixedDetails {
+                starting: Some((9, 4)),
+                private: false,
+                stock_available: 4,
+                track_available: 10,
+                initial_treasury: 0,
+                initial_interest: 0,
+            },
+        );
+        m.insert(
+            Company::GT,
+            CompanyFixedDetails {
+                starting: Some((2, 4)),
+                private: true,
+                stock_available: 1,
+                track_available: 0,
+                initial_treasury: 10,
+                initial_interest: 2,
+            },
+        );
+        m.insert(
+            Company::NMFT,
+            CompanyFixedDetails {
+                starting: None,
+                private: true,
+                stock_available: 1,
+                track_available: 0,
+                initial_treasury: 0,
+                initial_interest: 0,
+            },
+        );
+        m.insert(
+            Company::NED,
+            CompanyFixedDetails {
+                starting: None,
+                private: true,
+                stock_available: 1,
+                track_available: 0,
+                initial_treasury: 15,
+                initial_interest: 3,
+            },
+        );
+        m.insert(
+            Company::MLM,
+            CompanyFixedDetails {
+                starting: None,
+                private: true,
+                stock_available: 1,
+                track_available: 0,
+                initial_treasury: 20,
+                initial_interest: 5,
+            },
+        );
+        m
+    });
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct CommonAttributes {
     feature_cost: u32,
     symbol: Option<&'static str>,
     buildable: bool,
+    multiple_allowed: bool,
 }
 
 const FINAL_DIVIDEND_COUNT: usize = 6;
@@ -160,31 +239,37 @@ const N: Terrain = Terrain::Nothing(CommonAttributes {
     feature_cost: 0,
     symbol: None,
     buildable: false,
+    multiple_allowed: false,
 });
 const P: Terrain = Terrain::Plain(CommonAttributes {
     feature_cost: 3,
     symbol: Some("\u{1B}[37m-"),
     buildable: true,
+    multiple_allowed: true,
 });
 const F: Terrain = Terrain::Forest(CommonAttributes {
     feature_cost: 4,
     symbol: Some("\u{1B}[32m="),
     buildable: true,
+    multiple_allowed: false,
 });
 const M: Terrain = Terrain::Mountain(CommonAttributes {
     feature_cost: 6,
     symbol: Some("\u{1B}[32m^"),
+    multiple_allowed: false,
     buildable: true,
 });
 const T: Terrain = Terrain::Town(CommonAttributes {
     feature_cost: 4,
     symbol: Some("\u{1B}[33mT"),
     buildable: true,
+    multiple_allowed: true,
 });
 const R: Terrain = Terrain::Port(CommonAttributes {
     feature_cost: 5,
     symbol: Some("\u{1B}[31mP"),
     buildable: true,
+    multiple_allowed: true,
 });
 
 const TERRAIN: [[Terrain; 14]; 13] = [
