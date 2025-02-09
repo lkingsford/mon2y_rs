@@ -18,8 +18,8 @@ pub enum BestTurnPolicy {
 impl std::fmt::Display for BestTurnPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            BestTurnPolicy::MostVisits => write!(f, "MostVisits"),
-            BestTurnPolicy::Ucb0 => write!(f, "Ucb0"),
+            BestTurnPolicy::MostVisits => write!(f, "most-visits"),
+            BestTurnPolicy::Ucb0 => write!(f, "ucb0"),
         }
     }
 }
