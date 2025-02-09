@@ -9,12 +9,20 @@ pub trait Game {
         }
         loop {
             let mut input = String::new();
+            print!("Input for player {:?}: ", state.next_actor());
             if io::stdin().read_line(&mut input).is_err() {
                 println!("Failed to read line. Please try again.");
                 continue;
             }
             match input.trim().parse::<usize>() {
-                Ok(action) => return state.permitted_actions()[action].clone(),
+                Ok(action) => {
+                    if action < state.permitted_actions().len() {
+                        return state.permitted_actions()[action].clone();
+                    } else {
+                        println!("Action {} is out of range. Please try again.", action);
+                        continue;
+                    }
+                }
                 Err(_) => {
                     println!("Failed to parse action. Please enter a valid number.");
                     continue;
