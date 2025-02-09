@@ -1,6 +1,6 @@
 use linked_hash_set::LinkedHashSet;
 use std::cmp::{max, min};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::LazyLock;
 
@@ -22,7 +22,7 @@ enum EndGameReason {
     Resources,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum ChoosableAction {
     BuildTrack,
     AuctionShare,
@@ -654,7 +654,51 @@ impl State for EBRState {
                     }]
                 }
             }
-            Stage::ChooseAction => {}
+            Stage::ChooseAction => {
+                let removable_action_cubes = self
+                    .action_cubes
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &cube)| cube)
+                    .map(|(i, _)| ACTION_CUBE_SPACES[i])
+                    // BTreeSet as wanted the order, and perf was worth it
+                    .collect::<BTreeSet<ChoosableAction>>();
+                let mut addable_action_cubes = self
+                    .action_cubes
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &cube)| !cube)
+                    .map(|(i, _)| ACTION_CUBE_SPACES[i])
+                    .collect::<BTreeSet<ChoosableAction>>();
+                // placeholders
+                let can_merge_any = true;
+                let can_build_any = true;
+                let can_take_any = true;
+                let can_issue_any = true;
+                if !can_merge_any {
+                    addable_action_cubes.remove(&ChoosableAction::Merge);
+                };
+                if !can_build_any {
+                    addable_action_cubes.remove(&ChoosableAction::BuildTrack);
+                }
+                if !can_take_any {
+                    addable_action_cubes.remove(&ChoosableAction::TakeResources);
+                }
+                if !can_issue_any {
+                    addable_action_cubes.remove(&ChoosableAction::IssueBond);
+                }
+
+                let mut actions: Vec<EBRAction> = vec![];
+                for remove_action in &removable_action_cubes {
+                    for add_action in &addable_action_cubes {
+                        if remove_action != add_action {
+                            actions.push(EBRAction::MoveCube(*remove_action, *add_action));
+                        }
+                    }
+                }
+
+                actions
+            }
             _ => {
                 vec![]
             }
