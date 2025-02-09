@@ -401,22 +401,159 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
     m
 });
 
+const INITIAL_TRACK: [Track; 4] = [
+    Track {
+        location: (9, 4),
+        track_type: TrackType::CompanyOwned(Company::LW),
+    },
+    Track {
+        location: (9, 4),
+        track_type: TrackType::CompanyOwned(Company::TMLC),
+    },
+    Track {
+        location: (3, 5),
+        track_type: TrackType::CompanyOwned(Company::EBRC),
+    },
+    Track {
+        location: (2, 4),
+        track_type: TrackType::Narrow,
+    },
+];
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum EBRAction {}
+pub enum EBRAction {
+    Bid(usize),
+    Pass,
+}
 
 impl Action for EBRAction {
     type StateType = EBRState;
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
-        todo!();
+        match self {
+            EBRAction::Bid(bid) => {
+                let mut state = state.clone();
+                let stage = state.stage;
+                match stage {
+                    Stage::Auction {
+                        current_bid,
+                        lot,
+                        initial_auction,
+                        passed,
+                        ..
+                    } => {
+                        state.stage = Stage::Auction {
+                            current_bid: Some(*bid),
+                            lot,
+                            initial_auction: false,
+                            winning_bidder: Some(state.active_player),
+                            passed,
+                        };
+                    }
+                    _ => unreachable!(),
+                }
+                state
+            }
+            EBRAction::Pass => {
+                let mut state = state.clone();
+                let mut stage = state.stage;
+                match stage {
+                    Stage::Auction {
+                        current_bid,
+                        lot,
+                        initial_auction,
+                        winning_bidder,
+                        mut passed,
+                        ..
+                    } => {
+                        passed.insert(state.active_player);
+                        if passed.len() < state.player_count as usize {
+                            return state;
+                        };
+                        // Everybody has passed.
+                        state
+                            .holdings
+                            .get_mut(&winning_bidder.unwrap())
+                            .unwrap()
+                            .push(lot.clone());
+                        *state.player_cash.get_mut(&winning_bidder.unwrap()).unwrap() -=
+                            current_bid.unwrap_or(0) as isize;
+                        // Either next player, or next auction (for initial auction)
+                        if initial_auction {
+                            if lot == Company::GT {
+                                // End of initial auction
+                                state.stage = Stage::ChooseAction;
+                                state.next_actor = Actor::Player(winning_bidder.unwrap());
+                            }
+                            state.stage = Stage::Auction {
+                                initial_auction: true,
+                                current_bid: None,
+                                // Todo: Use the constant
+                                lot: match lot {
+                                    Company::LW => Company::TMLC,
+                                    Company::TMLC => Company::EBRC,
+                                    Company::EBRC => Company::GT,
+                                    _ => unreachable!(),
+                                },
+                                winning_bidder: None,
+                                passed: HashSet::new(),
+                            }
+                        } else  {
+                            state.stage = Stage::ChooseAction;
+                            state.next_actor = 
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+                state
+            }
+        }
     }
 }
 
 type PlayerID = u8;
 
 #[derive(Clone, Debug)]
+enum TrackType {
+    CompanyOwned(Company),
+    Narrow,
+}
+
+#[derive(Clone, Debug)]
+struct Track {
+    location: Coordinate,
+    track_type: TrackType,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum Stage {
+    Auction {
+        initial_auction: bool,
+        current_bid: Option<usize>,
+        lot: Company,
+        winning_bidder: Option<PlayerID>,
+        passed: HashSet<PlayerID>,
+    },
+    BuildTrack {
+        company: Company,
+        completed_builds: u8,
+    },
+    ChooseAction,
+    TakeResources {
+        company: Company,
+        taken_resources: u8,
+    },
+}
+
+#[derive(Clone, Debug)]
 pub struct EBRState {
     next_actor: Actor<EBRAction>,
+    active_player: PlayerID,
     player_count: u8,
+    track: Vec<Track>,
+    resources: Vec<Coordinate>,
+    stage: Stage,
+    holdings: HashMap<PlayerID, Vec<Company>>,
+    player_cash: HashMap<PlayerID, isize>,
 }
 
 impl EBRState {}
@@ -429,15 +566,15 @@ impl State for EBRState {
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
-        todo!();
+        vec![EBRAction::Dummy]
     }
 
     fn reward(&self) -> Vec<f64> {
-        todo!();
+        vec![0.0f64, 0.0f64, 0.0f64, 0.0f64]
     }
 
     fn terminal(&self) -> bool {
-        todo!();
+        false
     }
 }
 
@@ -453,8 +590,28 @@ impl Game for EBR {
         EBRState {
             next_actor: Actor::Player(0),
             player_count: self.player_count,
+            track: INITIAL_TRACK.to_vec(),
+            resources: vec![],
+            active_player: 0,
+            stage: Stage::Auction {
+                initial_action: true,
+                current_bid: None,
+                lot: Company::EBRC,
+                winning_bidder: None,
+                passed: HashSet::new(),
+            },
         }
     }
 
-    fn visualise_state(&self, state: &Self::StateType) {}
+    fn visualise_state(&self, state: &Self::StateType) {
+        println!("Resources: {:?}", state.resources);
+        println!("Track:");
+        for track in &state.track {
+            println!("{:?}", track);
+        }
+        println!("Stage: {:?}", state.stage);
+        println!("Active player: {}", state.active_player);
+        println!("Player count: {}", state.player_count);
+        println!("{:?}", state);
+    }
 }
