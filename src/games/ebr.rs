@@ -22,6 +22,7 @@ enum EndGameReason {
     Resources,
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 enum ChoosableAction {
     BuildTrack,
     AuctionShare,
@@ -45,7 +46,12 @@ const ACTION_CUBE_SPACES: [ChoosableAction; 11] = [
     ChoosableAction::PayDividend,
 ];
 
-const ACTION_CUBE_STARTING_SPACE_INDEXES: [usize; 4] = [5, 6, 7, 10];
+type ActionCubeSpaces = [bool; 11];
+
+const ACTION_CUBE_INIT: ActionCubeSpaces = [
+    // This might not be the most helpful way to mentally consider this
+    false, false, false, false, false, true, true, true, false, false, true,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct Bond {
@@ -424,6 +430,7 @@ const INITIAL_TRACK: [Track; 4] = [
 pub enum EBRAction {
     Bid(usize),
     Pass,
+    MoveCube(ChoosableAction, ChoosableAction),
 }
 
 impl Action for EBRAction {
@@ -440,10 +447,10 @@ impl Action for EBRAction {
                         passed,
                         ..
                     } => {
-                        let Actor::Player(mut next_actor) = state.next_actor else {
+                        let Actor::Player(actor) = state.next_actor else {
                             unreachable!()
                         };
-                        next_actor = (&next_actor + 1) % state.player_count;
+                        let mut next_actor = (&actor + 1) % state.player_count;
                         while (passed.contains(&next_actor)) {
                             next_actor = (&next_actor + 1) % state.player_count;
                         }
@@ -451,7 +458,7 @@ impl Action for EBRAction {
                             current_bid: Some(*bid as isize),
                             lot,
                             initial_auction,
-                            winning_bidder: Some(state.active_player),
+                            winning_bidder: Some(actor),
                             passed,
                         };
                         state.next_actor = Actor::Player(next_actor);
@@ -533,6 +540,27 @@ impl Action for EBRAction {
                 }
                 state
             }
+            EBRAction::MoveCube(from, to) => {
+                let mut state = state.clone();
+                // Find index of cube to remove
+                let remove_idx = state
+                    .action_cubes
+                    .iter()
+                    .enumerate()
+                    .find(|(i, &cube)| cube && ACTION_CUBE_SPACES[*i] == *from)
+                    .unwrap()
+                    .0;
+                let add_idx = state
+                    .action_cubes
+                    .iter()
+                    .enumerate()
+                    .find(|(i, &cube)| !cube && ACTION_CUBE_SPACES[*i] == *to)
+                    .unwrap()
+                    .0;
+                state.action_cubes[remove_idx] = false;
+                state.action_cubes[add_idx] = true;
+                state
+            }
         }
     }
 }
@@ -581,6 +609,7 @@ pub struct EBRState {
     stage: Stage,
     holdings: HashMap<PlayerID, Vec<Company>>,
     player_cash: HashMap<PlayerID, isize>,
+    action_cubes: ActionCubeSpaces,
 }
 
 impl EBRState {}
@@ -625,6 +654,7 @@ impl State for EBRState {
                     }]
                 }
             }
+            Stage::ChooseAction => {}
             _ => {
                 vec![]
             }
@@ -668,6 +698,7 @@ impl Game for EBR {
             player_cash: (0..self.player_count)
                 .map(|i| (i, 24 / self.player_count as isize))
                 .collect::<HashMap<u8, isize>>(),
+            action_cubes: ACTION_CUBE_INIT,
         }
     }
 
