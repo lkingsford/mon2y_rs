@@ -76,7 +76,28 @@ where
 
     match policy {
         BestTurnPolicy::Ucb0 => {
-            let picks = best_pick(&root_ref, 0.0);
+            let node = root_ref.read().unwrap();
+            // This bit of logic is reimplemented due to crashing when tree is fully explored
+            let mut picks = match &*node {
+                Node::Expanded { children, .. } => children
+                    .iter()
+                    // TODO: Add random factor
+                    .map(|(action, child)| {
+                        let child = child.read().unwrap();
+                        (
+                            action.clone(),
+                            child.value_sum() as f64
+                                / if child.visit_count() > 0 {
+                                    child.visit_count() as f64
+                                } else {
+                                    f64::INFINITY
+                                },
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+                _ => panic!("Root should be parent"),
+            };
+            picks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             log::debug!("Action, UCB0: {:?}", picks);
             picks[0].0.clone()
         }
