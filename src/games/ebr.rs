@@ -435,19 +435,26 @@ impl Action for EBRAction {
                 let stage = state.stage;
                 match stage {
                     Stage::Auction {
-                        current_bid,
                         lot,
                         initial_auction,
                         passed,
                         ..
                     } => {
+                        let Actor::Player(mut next_actor) = state.next_actor else {
+                            unreachable!()
+                        };
+                        next_actor = (&next_actor + 1) % state.player_count;
+                        while (passed.contains(&next_actor)) {
+                            next_actor = (&next_actor + 1) % state.player_count;
+                        }
                         state.stage = Stage::Auction {
-                            current_bid: Some(*bid),
+                            current_bid: Some(*bid as isize),
                             lot,
-                            initial_auction: false,
+                            initial_auction,
                             winning_bidder: Some(state.active_player),
                             passed,
                         };
+                        state.next_actor = Actor::Player(next_actor);
                     }
                     _ => unreachable!(),
                 }
@@ -455,7 +462,7 @@ impl Action for EBRAction {
             }
             EBRAction::Pass => {
                 let mut state = state.clone();
-                let mut stage = state.stage;
+                let stage = state.stage.clone();
                 match stage {
                     Stage::Auction {
                         current_bid,
@@ -463,12 +470,30 @@ impl Action for EBRAction {
                         initial_auction,
                         winning_bidder,
                         mut passed,
-                        ..
                     } => {
-                        passed.insert(state.active_player);
-                        if passed.len() < state.player_count as usize {
+                        println!("Passed.len is {:?}", passed.len());
+                        // -2 because need all but one to have passed, and one
+                        // isn't on the list yet
+                        if passed.len() < (state.player_count - 2) as usize {
+                            let Actor::Player(mut next_actor) = state.next_actor else {
+                                unreachable!()
+                            };
+                            passed.insert(next_actor as u8);
+                            println!("Passed is {:?}", passed);
+                            while (passed.contains(&next_actor)) {
+                                next_actor = (&next_actor + 1) % state.player_count;
+                            }
+                            state.next_actor = Actor::Player(winning_bidder.unwrap());
+                            state.stage = Stage::Auction {
+                                initial_auction,
+                                lot,
+                                current_bid,
+                                winning_bidder,
+                                passed: passed,
+                            };
                             return state;
                         };
+                        println!("Everybody passed");
                         // Everybody has passed.
                         state
                             .holdings
@@ -483,23 +508,25 @@ impl Action for EBRAction {
                                 // End of initial auction
                                 state.stage = Stage::ChooseAction;
                                 state.next_actor = Actor::Player(winning_bidder.unwrap());
+                            } else {
+                                state.stage = Stage::Auction {
+                                    initial_auction: true,
+                                    current_bid: None,
+                                    // Todo: Use the constant
+                                    lot: match lot {
+                                        Company::LW => Company::TMLC,
+                                        Company::TMLC => Company::EBRC,
+                                        Company::EBRC => Company::GT,
+                                        _ => unreachable!(),
+                                    },
+                                    winning_bidder: None,
+                                    passed: HashSet::new(),
+                                }
                             }
-                            state.stage = Stage::Auction {
-                                initial_auction: true,
-                                current_bid: None,
-                                // Todo: Use the constant
-                                lot: match lot {
-                                    Company::LW => Company::TMLC,
-                                    Company::TMLC => Company::EBRC,
-                                    Company::EBRC => Company::GT,
-                                    _ => unreachable!(),
-                                },
-                                winning_bidder: None,
-                                passed: HashSet::new(),
-                            }
-                        } else  {
+                        } else {
                             state.stage = Stage::ChooseAction;
-                            state.next_actor = 
+                            state.next_actor =
+                                Actor::Player((state.active_player + 1) % state.player_count);
                         }
                     }
                     _ => unreachable!(),
@@ -528,7 +555,7 @@ struct Track {
 enum Stage {
     Auction {
         initial_auction: bool,
-        current_bid: Option<usize>,
+        current_bid: Option<isize>,
         lot: Company,
         winning_bidder: Option<PlayerID>,
         passed: HashSet<PlayerID>,
@@ -566,7 +593,42 @@ impl State for EBRState {
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
-        vec![EBRAction::Dummy]
+        match &self.stage {
+            Stage::Auction {
+                initial_auction,
+                current_bid,
+                lot,
+                winning_bidder,
+                passed,
+            } => {
+                let Actor::Player(next_actor) = self.next_actor else {
+                    unreachable!()
+                };
+                let player_cash = *self.player_cash.get(&next_actor).unwrap();
+                if (current_bid.unwrap_or(-1) as isize) < player_cash {
+                    [
+                        (((current_bid.unwrap_or(0) + 1) as isize)..player_cash)
+                            .map(|bid| EBRAction::Bid(bid as usize))
+                            .collect(),
+                        vec![if *initial_auction && (*current_bid == None) {
+                            EBRAction::Bid(0)
+                        } else {
+                            EBRAction::Pass
+                        }],
+                    ]
+                    .concat()
+                } else {
+                    vec![if *initial_auction && (*current_bid == None) {
+                        EBRAction::Bid(0)
+                    } else {
+                        EBRAction::Pass
+                    }]
+                }
+            }
+            _ => {
+                vec![]
+            }
+        }
     }
 
     fn reward(&self) -> Vec<f64> {
@@ -594,12 +656,18 @@ impl Game for EBR {
             resources: vec![],
             active_player: 0,
             stage: Stage::Auction {
-                initial_action: true,
+                initial_auction: true,
                 current_bid: None,
-                lot: Company::EBRC,
+                lot: Company::LW,
                 winning_bidder: None,
                 passed: HashSet::new(),
             },
+            holdings: (0..self.player_count)
+                .map(|i| (i, Vec::new()))
+                .collect::<HashMap<u8, Vec<Company>>>(),
+            player_cash: (0..self.player_count)
+                .map(|i| (i, 24 / self.player_count as isize))
+                .collect::<HashMap<u8, isize>>(),
         }
     }
 
