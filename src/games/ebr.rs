@@ -140,10 +140,10 @@ const IPO_ORDER: [Company; 4] = [Company::LW, Company::TMLC, Company::EBRC, Comp
 struct CompanyFixedDetails {
     starting: Option<Coordinate>,
     private: bool,
-    stock_available: u32,
-    track_available: u32,
-    initial_treasury: u32,
-    initial_interest: u32,
+    stock_available: usize,
+    track_available: usize,
+    initial_treasury: usize,
+    initial_interest: usize,
 }
 
 type Coordinate = (usize, usize);
@@ -231,15 +231,14 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
         m
     });
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash)]
-enum Terrain {
-    Nothing(CommonAttributes),
-    Plain(CommonAttributes),
-    Forest(CommonAttributes),
-    Mountain(CommonAttributes),
-    Town(CommonAttributes),
-    Port(CommonAttributes),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CompanyDetails {
+    shares_held: usize,
+    shares_remaining: usize,
+    merged: bool,
+    cash: isize,
 }
+
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct CommonAttributes {
     feature_cost: u32,
@@ -251,48 +250,93 @@ struct CommonAttributes {
 
 const FINAL_DIVIDEND_COUNT: usize = 6;
 
-const N: Terrain = Terrain::Nothing(CommonAttributes {
-    feature_cost: 0,
-    symbol: None,
-    buildable: false,
-    multiple_allowed: false,
-    revenue: [0, 0, 0, 0, 0, 0],
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+enum Terrain {
+    Nothing,
+    Plain,
+    Forest,
+    Mountain,
+    Town,
+    Port,
+}
+
+static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    map.insert(
+        Terrain::Nothing,
+        CommonAttributes {
+            feature_cost: 0,
+            symbol: None,
+            buildable: false,
+            multiple_allowed: false,
+            revenue: [0, 0, 0, 0, 0, 0],
+        },
+    );
+    map.insert(
+        Terrain::Plain,
+        CommonAttributes {
+            feature_cost: 3,
+            symbol: Some("\u{1B}[37m-"),
+            buildable: true,
+            multiple_allowed: true,
+            revenue: [0, 0, 0, 0, 0, 0],
+        },
+    );
+    map.insert(
+        Terrain::Forest,
+        CommonAttributes {
+            feature_cost: 4,
+            symbol: Some("\u{1B}[32m="),
+            buildable: true,
+            multiple_allowed: false,
+            revenue: [1, 1, 1, 1, 0, 0],
+        },
+    );
+    map.insert(
+        Terrain::Mountain,
+        CommonAttributes {
+            feature_cost: 6,
+            symbol: Some("\u{1B}[32m^"),
+            multiple_allowed: false,
+            buildable: true,
+            revenue: [0, 0, 0, 0, 0, 0],
+        },
+    );
+    map.insert(
+        Terrain::Town,
+        CommonAttributes {
+            feature_cost: 4,
+            symbol: Some("\u{1B}[33mT"),
+            buildable: true,
+            multiple_allowed: true,
+            revenue: [0, 0, 0, 0, 0, 0],
+        },
+    );
+    map.insert(
+        Terrain::Port,
+        CommonAttributes {
+            feature_cost: 5,
+            symbol: Some("\u{1B}[31mP"),
+            buildable: true,
+            multiple_allowed: true,
+            revenue: [0, 0, 0, 0, 0, 0],
+        },
+    );
+    map
 });
-const P: Terrain = Terrain::Plain(CommonAttributes {
-    feature_cost: 3,
-    symbol: Some("\u{1B}[37m-"),
-    buildable: true,
-    multiple_allowed: true,
-    revenue: [0, 0, 0, 0, 0, 0],
-});
-const F: Terrain = Terrain::Forest(CommonAttributes {
-    feature_cost: 4,
-    symbol: Some("\u{1B}[32m="),
-    buildable: true,
-    multiple_allowed: false,
-    revenue: [1, 1, 1, 1, 0, 0],
-});
-const M: Terrain = Terrain::Mountain(CommonAttributes {
-    feature_cost: 6,
-    symbol: Some("\u{1B}[32m^"),
-    multiple_allowed: false,
-    buildable: true,
-    revenue: [0, 0, 0, 0, 0, 0],
-});
-const T: Terrain = Terrain::Town(CommonAttributes {
-    feature_cost: 4,
-    symbol: Some("\u{1B}[33mT"),
-    buildable: true,
-    multiple_allowed: true,
-    revenue: [0, 0, 0, 0, 0, 0],
-});
-const R: Terrain = Terrain::Port(CommonAttributes {
-    feature_cost: 5,
-    symbol: Some("\u{1B}[31mP"),
-    buildable: true,
-    multiple_allowed: true,
-    revenue: [0, 0, 0, 0, 0, 0],
-});
+
+impl Terrain {
+    fn attributes(&self) -> &CommonAttributes {
+        &TERRAIN_ATTRIBUTES[self]
+    }
+}
+
+const N: Terrain = Terrain::Nothing;
+const P: Terrain = Terrain::Plain;
+const F: Terrain = Terrain::Forest;
+const M: Terrain = Terrain::Mountain;
+const T: Terrain = Terrain::Town;
+const R: Terrain = Terrain::Port;
 
 const TERRAIN: [[Terrain; 14]; 13] = [
     /* */ [N, N, N, N, N, N, N, N, N, N, N, N, N, N],
@@ -633,6 +677,7 @@ pub struct EBRState {
     action_cubes: ActionCubeSpaces,
     revenue: HashMap<Company, isize>,
     dividends_paid: usize,
+    company_details: HashMap<Company, CompanyDetails>,
 }
 
 impl EBRState {
@@ -643,6 +688,8 @@ impl EBRState {
         if self.player_cash[&next_actor] < 1 {
             return false;
         };
+        // Check for min bid of at least one company with shares available
+        // (including the minors)
         todo!()
     }
 
@@ -650,19 +697,27 @@ impl EBRState {
         let company_track = self
             .track
             .iter()
-            .filter(|t| t.track_type == TrackType::CompanyOwned(company));
-        let track_terrain_revenue = &company_track
-            .map(|t| TERRAIN[t.location.0][t.location.1].revenue[self.dividends_paid])
+            .filter(|t| t.track_type == TrackType::CompanyOwned(company.clone()));
+        let track_terrain_revenue = company_track
+            .clone()
+            .map(|t| TERRAIN[t.location.0][t.location.1].attributes().revenue[self.dividends_paid])
             .sum::<isize>();
-        let track_feature_revenue = &company_track
+        let track_feature_revenue = company_track
+            .clone()
             .map(
-                |t| match (FEATURES.get_key_value(&(t.location.0, t.location.1))) {
+                |t| match FEATURES.get_key_value(&(t.location.0, t.location.1)) {
                     None => 0,
                     Some(feature) => feature.1.revenue[self.dividends_paid],
                 },
             )
-            .sum();
+            .sum::<isize>();
         track_terrain_revenue + track_feature_revenue
+    }
+
+    fn min_bid(&self, company: Company) -> isize {
+        let rev = self.net_revenue(company.clone());
+        let owned_shares = self.company_details[&company].shares_held;
+        return max(1, rev / (owned_shares as isize + 1));
     }
 }
 
@@ -801,6 +856,20 @@ impl Game for EBR {
             revenue: ALL_COMPANIES.iter().map(|c| (c.clone(), 0)).collect(),
             action_cubes: ACTION_CUBE_INIT,
             dividends_paid: 0,
+            company_details: COMPANY_FIXED_DETAILS
+                .iter()
+                .map(|d| {
+                    (
+                        d.0.clone(),
+                        CompanyDetails {
+                            shares_held: 0,
+                            shares_remaining: d.1.stock_available,
+                            merged: false,
+                            cash: 0,
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 
