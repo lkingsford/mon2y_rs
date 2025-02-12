@@ -23,7 +23,7 @@ enum EndGameReason {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-enum ChoosableAction {
+pub enum ChoosableAction {
     BuildTrack,
     AuctionShare,
     TakeResources,
@@ -98,21 +98,11 @@ static INITIAL_CASH: LazyLock<HashMap<u8, u32>> = LazyLock::new(|| {
     m
 });
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash)]
-enum Terrain {
-    Nothing(CommonAttributes),
-    Plain(CommonAttributes),
-    Forest(CommonAttributes),
-    Mountain(CommonAttributes),
-    Town(CommonAttributes),
-    Port(CommonAttributes),
-}
-
 #[derive(Debug, Clone)]
 struct Feature {
     feature_type: FeatureType,
     location_name: Option<String>,
-    revenue: Option<Vec<u32>>,
+    revenue: [isize; 6],
     additional_cost: usize,
 }
 
@@ -134,6 +124,16 @@ enum Company {
     NED,
     MLM,
 }
+
+const ALL_COMPANIES: [Company; 7] = [
+    Company::EBRC,
+    Company::LW,
+    Company::TMLC,
+    Company::GT,
+    Company::NMFT,
+    Company::NED,
+    Company::MLM,
+];
 
 const IPO_ORDER: [Company; 4] = [Company::LW, Company::TMLC, Company::EBRC, Company::GT];
 
@@ -232,11 +232,21 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
     });
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
+enum Terrain {
+    Nothing(CommonAttributes),
+    Plain(CommonAttributes),
+    Forest(CommonAttributes),
+    Mountain(CommonAttributes),
+    Town(CommonAttributes),
+    Port(CommonAttributes),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct CommonAttributes {
     feature_cost: u32,
     symbol: Option<&'static str>,
     buildable: bool,
     multiple_allowed: bool,
+    revenue: [isize; 6],
 }
 
 const FINAL_DIVIDEND_COUNT: usize = 6;
@@ -246,36 +256,42 @@ const N: Terrain = Terrain::Nothing(CommonAttributes {
     symbol: None,
     buildable: false,
     multiple_allowed: false,
+    revenue: [0, 0, 0, 0, 0, 0],
 });
 const P: Terrain = Terrain::Plain(CommonAttributes {
     feature_cost: 3,
     symbol: Some("\u{1B}[37m-"),
     buildable: true,
     multiple_allowed: true,
+    revenue: [0, 0, 0, 0, 0, 0],
 });
 const F: Terrain = Terrain::Forest(CommonAttributes {
     feature_cost: 4,
     symbol: Some("\u{1B}[32m="),
     buildable: true,
     multiple_allowed: false,
+    revenue: [1, 1, 1, 1, 0, 0],
 });
 const M: Terrain = Terrain::Mountain(CommonAttributes {
     feature_cost: 6,
     symbol: Some("\u{1B}[32m^"),
     multiple_allowed: false,
     buildable: true,
+    revenue: [0, 0, 0, 0, 0, 0],
 });
 const T: Terrain = Terrain::Town(CommonAttributes {
     feature_cost: 4,
     symbol: Some("\u{1B}[33mT"),
     buildable: true,
     multiple_allowed: true,
+    revenue: [0, 0, 0, 0, 0, 0],
 });
 const R: Terrain = Terrain::Port(CommonAttributes {
     feature_cost: 5,
     symbol: Some("\u{1B}[31mP"),
     buildable: true,
     multiple_allowed: true,
+    revenue: [0, 0, 0, 0, 0, 0],
 });
 
 const TERRAIN: [[Terrain; 14]; 13] = [
@@ -304,7 +320,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Port of Strahan".to_string()),
-            revenue: Some(vec![2, 2, 0, 0, 0, 0]),
+            revenue: ([2, 2, 0, 0, 0, 0]),
             additional_cost: 0,
         },
     );
@@ -313,7 +329,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Hobart".to_string()),
-            revenue: Some(vec![5, 5, 4, 4, 3, 3]),
+            revenue: ([5, 5, 4, 4, 3, 3]),
             additional_cost: 0,
         },
     );
@@ -322,7 +338,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Town,
             location_name: Some("New Norfolk".to_string()),
-            revenue: Some(vec![2, 2, 2, 2, 2, 2]),
+            revenue: ([2, 2, 2, 2, 2, 2]),
             additional_cost: 0,
         },
     );
@@ -331,7 +347,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Burnie".to_string()),
-            revenue: Some(vec![2, 2, 1, 1, 0, 0]),
+            revenue: ([2, 2, 1, 1, 0, 0]),
             additional_cost: 0,
         },
     );
@@ -340,7 +356,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Town,
             location_name: Some("Ulverstone".to_string()),
-            revenue: Some(vec![2, 2, 1, 1, 1, 1]),
+            revenue: ([2, 2, 1, 1, 1, 1]),
             additional_cost: 0,
         },
     );
@@ -349,7 +365,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Devonport".to_string()),
-            revenue: Some(vec![3, 3, 1, 1, 0, 0]),
+            revenue: ([3, 3, 1, 1, 0, 0]),
             additional_cost: 0,
         },
     );
@@ -358,7 +374,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Launceston".to_string()),
-            revenue: Some(vec![3, 3, 1, 1, 0, 0]),
+            revenue: ([3, 3, 1, 1, 0, 0]),
             additional_cost: 0,
         },
     );
@@ -367,7 +383,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Town,
             location_name: Some("Queenstown".to_string()),
-            revenue: Some(vec![2, 2, 2, 2, 2, 2]),
+            revenue: ([2, 2, 2, 2, 2, 2]),
             additional_cost: 0,
         },
     );
@@ -399,7 +415,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
                 Feature {
                     feature_type,
                     location_name: None,
-                    revenue: None,
+                    revenue: [0, 0, 0, 0, 0, 0],
                     additional_cost: cost,
                 },
             );
@@ -431,12 +447,17 @@ pub enum EBRAction {
     Bid(usize),
     Pass,
     MoveCube(ChoosableAction, ChoosableAction),
+    Stalemate,
 }
 
 impl Action for EBRAction {
     type StateType = EBRState;
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
         match self {
+            EBRAction::Stalemate => {
+                todo!()
+                // terminal
+            }
             EBRAction::Bid(bid) => {
                 let mut state = state.clone();
                 let stage = state.stage;
@@ -567,7 +588,7 @@ impl Action for EBRAction {
 
 type PlayerID = u8;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum TrackType {
     CompanyOwned(Company),
     Narrow,
@@ -610,9 +631,40 @@ pub struct EBRState {
     holdings: HashMap<PlayerID, Vec<Company>>,
     player_cash: HashMap<PlayerID, isize>,
     action_cubes: ActionCubeSpaces,
+    revenue: HashMap<Company, isize>,
+    dividends_paid: usize,
 }
 
-impl EBRState {}
+impl EBRState {
+    fn can_auction_any(&self) -> bool {
+        let Actor::Player(next_actor) = self.next_actor else {
+            unreachable!()
+        };
+        if self.player_cash[&next_actor] < 1 {
+            return false;
+        };
+        todo!()
+    }
+
+    fn net_revenue(&self, company: Company) -> isize {
+        let company_track = self
+            .track
+            .iter()
+            .filter(|t| t.track_type == TrackType::CompanyOwned(company));
+        let track_terrain_revenue = &company_track
+            .map(|t| TERRAIN[t.location.0][t.location.1].revenue[self.dividends_paid])
+            .sum::<isize>();
+        let track_feature_revenue = &company_track
+            .map(
+                |t| match (FEATURES.get_key_value(&(t.location.0, t.location.1))) {
+                    None => 0,
+                    Some(feature) => feature.1.revenue[self.dividends_paid],
+                },
+            )
+            .sum();
+        track_terrain_revenue + track_feature_revenue
+    }
+}
 
 impl State for EBRState {
     type ActionType = EBRAction;
@@ -675,6 +727,7 @@ impl State for EBRState {
                 let can_build_any = true;
                 let can_take_any = true;
                 let can_issue_any = true;
+                let can_auction_any = true;
                 if !can_merge_any {
                     addable_action_cubes.remove(&ChoosableAction::Merge);
                 };
@@ -696,8 +749,11 @@ impl State for EBRState {
                         }
                     }
                 }
-
-                actions
+                if actions.is_empty() {
+                    vec![EBRAction::Stalemate]
+                } else {
+                    actions
+                }
             }
             _ => {
                 vec![]
@@ -742,7 +798,9 @@ impl Game for EBR {
             player_cash: (0..self.player_count)
                 .map(|i| (i, 24 / self.player_count as isize))
                 .collect::<HashMap<u8, isize>>(),
+            revenue: ALL_COMPANIES.iter().map(|c| (c.clone(), 0)).collect(),
             action_cubes: ACTION_CUBE_INIT,
+            dividends_paid: 0,
         }
     }
 
