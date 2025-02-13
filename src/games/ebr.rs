@@ -642,6 +642,7 @@ impl Action for EBRAction {
                 state.action_cubes[add_idx] = true;
                 match to {
                     ChoosableAction::AuctionShare => state.stage = Stage::ChooseAuctionCompany,
+                    ChoosableAction::PayDividend => state.pay_dividend(),
                     _ => warn!("Not implemented yet"),
                 }
                 state
@@ -764,6 +765,38 @@ impl EBRState {
             )
             .sum::<isize>();
         track_terrain_revenue + track_feature_revenue
+    }
+
+    fn pay_dividend(&self) -> EBRState {
+        let rev_per_share = self
+            .company_details
+            .iter()
+            .map(|c| {
+                (
+                    c.0.clone(),
+                    div_ceil(self.net_revenue(c.0.clone()), c.1.shares_held as isize),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        EBRState {
+            dividends_paid: self.dividends_paid + 1,
+
+            player_cash: self
+                .player_cash
+                .iter()
+                .map(|(player, old_cash)| {
+                    (
+                        *player,
+                        old_cash
+                            + self.holdings[player]
+                                .iter()
+                                .map(|company| rev_per_share[company])
+                                .sum::<isize>(),
+                    )
+                })
+                .collect::<HashMap<u8, isize>>(),
+            ..self.clone()
+        }
     }
 }
 
@@ -946,4 +979,9 @@ impl Game for EBR {
         println!("Player count: {}", state.player_count);
         println!("{:?}", state);
     }
+}
+
+fn div_ceil(numerator: isize, denominator: isize) -> isize {
+    // Slightly cheeky
+    (numerator + denominator - 1) / denominator
 }
