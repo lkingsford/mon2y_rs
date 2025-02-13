@@ -1,4 +1,5 @@
 use linked_hash_set::LinkedHashSet;
+use log::warn;
 use std::cmp::{max, min};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
@@ -114,7 +115,7 @@ enum FeatureType {
     Water2,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
 enum Company {
     EBRC,
     LW,
@@ -136,6 +137,8 @@ const ALL_COMPANIES: [Company; 7] = [
 ];
 
 const IPO_ORDER: [Company; 4] = [Company::LW, Company::TMLC, Company::EBRC, Company::GT];
+static PRIVATE_ORDER: LazyLock<Vec<Company>> =
+    LazyLock::new(|| vec![Company::GT, Company::NMFT, Company::NED, Company::MLM]);
 
 struct CompanyFixedDetails {
     starting: Option<Coordinate>,
@@ -235,8 +238,9 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
 struct CompanyDetails {
     shares_held: usize,
     shares_remaining: usize,
-    merged: bool,
+    merged: Option<bool>,
     cash: isize,
+    available: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -492,6 +496,7 @@ pub enum EBRAction {
     Pass,
     MoveCube(ChoosableAction, ChoosableAction),
     Stalemate,
+    ChooseAuctionCompany(Company),
 }
 
 impl Action for EBRAction {
@@ -574,6 +579,17 @@ impl Action for EBRAction {
                             .push(lot.clone());
                         *state.player_cash.get_mut(&winning_bidder.unwrap()).unwrap() -=
                             current_bid.unwrap_or(0) as isize;
+                        if COMPANY_FIXED_DETAILS[&lot].private {
+                            let index = PRIVATE_ORDER.iter().position(|c| *c == lot).unwrap();
+                            if index != PRIVATE_ORDER.len() - 1 {
+                                state
+                                    .company_details
+                                    .get_mut(&PRIVATE_ORDER[index + 1])
+                                    .unwrap()
+                                    .available = Some(true);
+                            }
+                            state.company_details.get_mut(&lot).unwrap().available = Some(false);
+                        }
                         // Either next player, or next auction (for initial auction)
                         if initial_auction {
                             if lot == Company::GT {
@@ -624,6 +640,21 @@ impl Action for EBRAction {
                     .0;
                 state.action_cubes[remove_idx] = false;
                 state.action_cubes[add_idx] = true;
+                match to {
+                    ChoosableAction::AuctionShare => state.stage = Stage::ChooseAuctionCompany,
+                    _ => warn!("Not implemented yet"),
+                }
+                state
+            }
+            EBRAction::ChooseAuctionCompany(company) => {
+                let mut state = state.clone();
+                state.stage = Stage::Auction {
+                    initial_auction: false,
+                    current_bid: None,
+                    lot: *company,
+                    winning_bidder: None,
+                    passed: HashSet::new(),
+                };
                 state
             }
         }
@@ -662,6 +693,7 @@ enum Stage {
         company: Company,
         taken_resources: u8,
     },
+    ChooseAuctionCompany,
 }
 
 #[derive(Clone, Debug)]
@@ -681,16 +713,36 @@ pub struct EBRState {
 }
 
 impl EBRState {
+    fn min_bid(&self, company: Company) -> isize {
+        let rev = self.net_revenue(company.clone());
+        let owned_shares = self.company_details[&company].shares_held;
+        return max(1, rev / (owned_shares as isize + 1));
+    }
+
     fn can_auction_any(&self) -> bool {
         let Actor::Player(next_actor) = self.next_actor else {
             unreachable!()
         };
-        if self.player_cash[&next_actor] < 1 {
+        let cash = self.player_cash[&next_actor];
+        if &cash < &1 {
             return false;
         };
         // Check for min bid of at least one company with shares available
         // (including the minors)
-        todo!()
+        COMPANY_FIXED_DETAILS
+            .iter()
+            .any(|c| self.can_auction(c.0.clone(), cash))
+    }
+
+    fn can_auction(&self, company: Company, cash: isize) -> bool {
+        let company_details = self.company_details[&company];
+        let private = COMPANY_FIXED_DETAILS[&company].private;
+        ((private
+            && company_details
+                .available
+                .expect("Private Company Details Should Have Available"))
+            || (!private && company_details.shares_remaining > 0))
+            && (cash >= self.min_bid(company))
     }
 
     fn net_revenue(&self, company: Company) -> isize {
@@ -713,12 +765,6 @@ impl EBRState {
             .sum::<isize>();
         track_terrain_revenue + track_feature_revenue
     }
-
-    fn min_bid(&self, company: Company) -> isize {
-        let rev = self.net_revenue(company.clone());
-        let owned_shares = self.company_details[&company].shares_held;
-        return max(1, rev / (owned_shares as isize + 1));
-    }
 }
 
 impl State for EBRState {
@@ -729,6 +775,9 @@ impl State for EBRState {
     }
 
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
+        let Actor::Player(next_actor) = self.next_actor else {
+            unreachable!()
+        };
         match &self.stage {
             Stage::Auction {
                 initial_auction,
@@ -737,27 +786,27 @@ impl State for EBRState {
                 winning_bidder,
                 passed,
             } => {
-                let Actor::Player(next_actor) = self.next_actor else {
-                    unreachable!()
-                };
                 let player_cash = *self.player_cash.get(&next_actor).unwrap();
                 if (current_bid.unwrap_or(-1) as isize) < player_cash {
-                    [
-                        (((current_bid.unwrap_or(0) + 1) as isize)..player_cash)
-                            .map(|bid| EBRAction::Bid(bid as usize))
-                            .collect(),
-                        vec![if *initial_auction && (*current_bid == None) {
-                            EBRAction::Bid(0)
-                        } else {
-                            EBRAction::Pass
-                        }],
-                    ]
-                    .concat()
+                    let mut actions: Vec<EBRAction> = (((current_bid.unwrap_or(0) + 1) as isize)
+                        ..=player_cash)
+                        .map(|bid| EBRAction::Bid(bid as usize))
+                        .collect();
+                    if *initial_auction && (*current_bid == None) {
+                        actions.push(EBRAction::Bid(0));
+                    } else if (!(*initial_auction) && *current_bid != None)
+                        || (*current_bid != None)
+                    {
+                        actions.push(EBRAction::Pass);
+                    }
+                    actions
                 } else {
                     vec![if *initial_auction && (*current_bid == None) {
                         EBRAction::Bid(0)
-                    } else {
+                    } else if !(*initial_auction) || (*current_bid != None) {
                         EBRAction::Pass
+                    } else {
+                        panic!("Somehow, Palapatine has returned")
                     }]
                 }
             }
@@ -782,7 +831,7 @@ impl State for EBRState {
                 let can_build_any = true;
                 let can_take_any = true;
                 let can_issue_any = true;
-                let can_auction_any = true;
+                let can_auction_any = self.can_auction_any();
                 if !can_merge_any {
                     addable_action_cubes.remove(&ChoosableAction::Merge);
                 };
@@ -794,6 +843,9 @@ impl State for EBRState {
                 }
                 if !can_issue_any {
                     addable_action_cubes.remove(&ChoosableAction::IssueBond);
+                }
+                if !can_auction_any {
+                    addable_action_cubes.remove(&ChoosableAction::AuctionShare);
                 }
 
                 let mut actions: Vec<EBRAction> = vec![];
@@ -810,7 +862,16 @@ impl State for EBRState {
                     actions
                 }
             }
+            Stage::ChooseAuctionCompany => {
+                let cash = self.player_cash[&next_actor];
+                COMPANY_FIXED_DETAILS
+                    .iter()
+                    .filter(|c| self.can_auction(c.0.clone(), cash))
+                    .map(|c| EBRAction::ChooseAuctionCompany(c.0.clone()))
+                    .collect()
+            }
             _ => {
+                warn!("Unimplemented Stage in PermittedActions");
                 vec![]
             }
         }
@@ -864,8 +925,9 @@ impl Game for EBR {
                         CompanyDetails {
                             shares_held: 0,
                             shares_remaining: d.1.stock_available,
-                            merged: false,
+                            merged: if d.1.private { Some(false) } else { None },
                             cash: 0,
+                            available: if d.1.private { Some(false) } else { None },
                         },
                     )
                 })
