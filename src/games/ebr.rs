@@ -767,7 +767,7 @@ impl EBRState {
         track_terrain_revenue + track_feature_revenue
     }
 
-    fn pay_dividend(&self) -> EBRState {
+    fn pay_dividend(&mut self) {
         let rev_per_share = self
             .company_details
             .iter()
@@ -778,25 +778,27 @@ impl EBRState {
                 )
             })
             .collect::<HashMap<_, _>>();
-        EBRState {
-            dividends_paid: self.dividends_paid + 1,
-
-            player_cash: self
-                .player_cash
-                .iter()
-                .map(|(player, old_cash)| {
-                    (
-                        *player,
-                        old_cash
-                            + self.holdings[player]
-                                .iter()
-                                .map(|company| rev_per_share[company])
-                                .sum::<isize>(),
-                    )
-                })
-                .collect::<HashMap<u8, isize>>(),
-            ..self.clone()
-        }
+        self.next_actor = {
+            let Actor::Player(actor) = self.next_actor else {
+                unreachable!()
+            };
+            Actor::Player((&actor + 1) % self.player_count)
+        };
+        self.dividends_paid = self.dividends_paid + 1;
+        self.player_cash = self
+            .player_cash
+            .iter()
+            .map(|(player, old_cash)| {
+                (
+                    *player,
+                    old_cash
+                        + self.holdings[player]
+                            .iter()
+                            .map(|company| rev_per_share[company])
+                            .sum::<isize>(),
+                )
+            })
+            .collect::<HashMap<u8, isize>>();
     }
 }
 
