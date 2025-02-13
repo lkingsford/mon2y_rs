@@ -579,6 +579,11 @@ impl Action for EBRAction {
                             .push(lot.clone());
                         *state.player_cash.get_mut(&winning_bidder.unwrap()).unwrap() -=
                             current_bid.unwrap_or(0) as isize;
+                        {
+                            let company_details = state.company_details.get_mut(&lot).unwrap();
+                            company_details.shares_held += 1;
+                            company_details.shares_remaining -= 1;
+                        }
                         if COMPANY_FIXED_DETAILS[&lot].private {
                             let index = PRIVATE_ORDER.iter().position(|c| *c == lot).unwrap();
                             if index != PRIVATE_ORDER.len() - 1 {
@@ -717,7 +722,7 @@ impl EBRState {
     fn min_bid(&self, company: Company) -> isize {
         let rev = self.net_revenue(company.clone());
         let owned_shares = self.company_details[&company].shares_held;
-        return max(1, rev / (owned_shares as isize + 1));
+        return max(1, div_ceil(rev, (owned_shares as isize + 1)));
     }
 
     fn can_auction_any(&self) -> bool {
@@ -774,7 +779,11 @@ impl EBRState {
             .map(|c| {
                 (
                     c.0.clone(),
-                    div_ceil(self.net_revenue(c.0.clone()), c.1.shares_held as isize),
+                    if c.1.shares_held > 0 {
+                        div_ceil(self.net_revenue(c.0.clone()), c.1.shares_held as isize)
+                    } else {
+                        0
+                    },
                 )
             })
             .collect::<HashMap<_, _>>();
