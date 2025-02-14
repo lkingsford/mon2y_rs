@@ -241,6 +241,7 @@ struct CompanyDetails {
     merged: Option<bool>,
     cash: isize,
     available: Option<bool>,
+    hq: Option<Coordinate>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -360,6 +361,22 @@ const TERRAIN: [[Terrain; 14]; 13] = [
 
 const WATER_1_COST: usize = 1;
 const WATER_2_COST: usize = 3;
+
+static PRIVATE_STARTING_LOCATIONS: LazyLock<Vec<Coordinate>> = LazyLock::new(|| {
+    TERRAIN
+        .iter()
+        .enumerate()
+        .flat_map(|(y, column)| {
+            column
+                .iter()
+                .enumerate()
+                .filter(|(x, cell)| **cell == Terrain::Mountain || **cell == Terrain::Forest)
+                .map(move |(x, _cell)| (x, y))
+        })
+        .collect::<Vec<Coordinate>>()
+});
+// Privates can start anywhere on a Forest or Mountain (without an existing HQ,
+// but obviously, that bit is state dependent)
 
 static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
     let mut m = HashMap::new();
@@ -497,6 +514,7 @@ pub enum EBRAction {
     MoveCube(ChoosableAction, ChoosableAction),
     Stalemate,
     ChooseAuctionCompany(Company),
+    StartPrivateAt(Company, Coordinate),
 }
 
 impl Action for EBRAction {
@@ -654,6 +672,22 @@ impl Action for EBRAction {
             }
             EBRAction::ChooseAuctionCompany(company) => {
                 let mut state = state.clone();
+                if !COMPANY_FIXED_DETAILS[&company].private {
+                    state.stage = Stage::Auction {
+                        initial_auction: false,
+                        current_bid: None,
+                        lot: *company,
+                        winning_bidder: None,
+                        passed: HashSet::new(),
+                    };
+                } else {
+                    state.stage = Stage::ChoosePrivateStart(*company);
+                }
+                state
+            }
+            EBRAction::StartPrivateAt(company, location) => {
+                let mut state = state.clone();
+                state.company_details.get_mut(company).unwrap().hq = Some(*location);
                 state.stage = Stage::Auction {
                     initial_auction: false,
                     current_bid: None,
@@ -700,6 +734,7 @@ enum Stage {
         taken_resources: u8,
     },
     ChooseAuctionCompany,
+    ChoosePrivateStart(Company),
 }
 
 #[derive(Clone, Debug)]
@@ -914,6 +949,16 @@ impl State for EBRState {
                     .map(|c| EBRAction::ChooseAuctionCompany(c.0.clone()))
                     .collect()
             }
+            Stage::ChoosePrivateStart(company) => PRIVATE_STARTING_LOCATIONS
+                .iter()
+                .filter(|location| {
+                    !self
+                        .company_details
+                        .iter()
+                        .any(|c| c.1.hq == Some(**location))
+                })
+                .map(|location| EBRAction::StartPrivateAt(*company, *location))
+                .collect(),
             _ => {
                 warn!("Unimplemented Stage in PermittedActions");
                 vec![]
@@ -972,6 +1017,7 @@ impl Game for EBR {
                             merged: if d.1.private { Some(false) } else { None },
                             cash: 0,
                             available: if d.1.private { Some(false) } else { None },
+                            hq: d.1.starting,
                         },
                     )
                 })
