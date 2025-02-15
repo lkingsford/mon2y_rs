@@ -57,36 +57,36 @@ const ACTION_CUBE_INIT: ActionCubeSpaces = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Bond {
     face_value: usize,
-    token: usize,
+    coupon: usize,
 }
 const BONDS: [Bond; 7] = [
     Bond {
         face_value: 5,
-        token: 1,
+        coupon: 1,
     },
     Bond {
         face_value: 5,
-        token: 1,
+        coupon: 1,
     },
     Bond {
         face_value: 10,
-        token: 3,
+        coupon: 3,
     },
     Bond {
         face_value: 10,
-        token: 3,
+        coupon: 3,
     },
     Bond {
         face_value: 10,
-        token: 4,
+        coupon: 4,
     },
     Bond {
         face_value: 15,
-        token: 4,
+        coupon: 4,
     },
     Bond {
         face_value: 15,
-        token: 5,
+        coupon: 5,
     },
 ];
 
@@ -352,6 +352,9 @@ const M: Terrain = Terrain::Mountain;
 const T: Terrain = Terrain::Town;
 const R: Terrain = Terrain::Port;
 
+const HEIGHT: usize = 13;
+const WIDTH: usize = 14;
+
 const TERRAIN: [[Terrain; 14]; 13] = [
     /* */ [N, N, N, N, N, N, N, N, N, N, N, N, N, N],
     /*  */ [N, P, F, P, P, N, N, N, N, N, N, N, P, N],
@@ -583,7 +586,6 @@ impl Action for EBRAction {
                         winning_bidder,
                         mut passed,
                     } => {
-                        println!("Passed.len is {:?}", passed.len());
                         // -2 because need all but one to have passed, and one
                         // isn't on the list yet
                         if passed.len() < (state.player_count - 2) as usize {
@@ -591,7 +593,6 @@ impl Action for EBRAction {
                                 unreachable!()
                             };
                             passed.insert(next_actor as u8);
-                            println!("Passed is {:?}", passed);
                             while (passed.contains(&next_actor)) {
                                 next_actor = (&next_actor + 1) % state.player_count;
                             }
@@ -605,7 +606,6 @@ impl Action for EBRAction {
                             };
                             return state;
                         };
-                        println!("Everybody passed");
                         // Everybody has passed.
                         state
                             .holdings
@@ -664,9 +664,9 @@ impl Action for EBRAction {
             }
             EBRAction::MoveCube(from, to) => {
                 let mut state = state.clone();
-        let Actor::Player(next_actor) = state.next_actor else {
-            unreachable!()
-        };
+                let Actor::Player(next_actor) = state.next_actor else {
+                    unreachable!()
+                };
                 state.active_player = next_actor;
                 // Find index of cube to remove
                 let remove_idx = state
@@ -724,6 +724,9 @@ impl Action for EBRAction {
                 let mut potential_locations = get_neighbors(location.clone());
                 potential_locations.push(*location);
                 for location in potential_locations {
+                    if location.0 >= WIDTH || location.1 >= HEIGHT {
+                        continue;
+                    }
                     let terrain = TERRAIN[location.1][location.0];
                     match terrain {
                         Terrain::Forest => state.resource_cubes.push(location),
@@ -807,9 +810,8 @@ impl Action for EBRAction {
                     deferred: true,
                 });
                 state.unissued_bonds.retain(|b| *b != *bond);
-                        state.stage = Stage::ChooseAction;
-                        state.next_actor =
-                            Actor::Player((state.active_player + 1) % state.player_count);
+                state.stage = Stage::ChooseAction;
+                state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
                 state
             }
         }
@@ -951,6 +953,9 @@ impl EBRState {
             .collect::<HashSet<Coordinate>>() // Unique
             .iter()
             .filter_map(|t| {
+                if t.0 >= WIDTH || t.1 >= HEIGHT {
+                    return None;
+                }
                 let terrain = TERRAIN[t.1][t.0];
                 let attr = TERRAIN_ATTRIBUTES[&terrain];
                 if !attr.buildable {
@@ -1049,7 +1054,7 @@ impl EBRState {
             .filter(|t| t.track_type == TrackType::CompanyOwned(company.clone()));
         let track_terrain_revenue = company_track
             .clone()
-            .map(|t| TERRAIN[t.location.0][t.location.1].attributes().revenue[self.dividends_paid])
+            .map(|t| TERRAIN[t.location.1][t.location.0].attributes().revenue[self.dividends_paid])
             .sum::<isize>();
         let track_feature_revenue = company_track
             .clone()
@@ -1060,11 +1065,24 @@ impl EBRState {
                 },
             )
             .sum::<isize>();
-        track_terrain_revenue + track_feature_revenue
+        let bond_interest = self
+            .company_details
+            .get(&company)
+            .unwrap()
+            .bonds
+            .iter()
+            .filter_map(|b| {
+                if b.deferred {
+                    None
+                } else {
+                    Some(b.bond.coupon)
+                }
+            })
+            .sum::<usize>();
+        track_terrain_revenue + track_feature_revenue - bond_interest as isize
     }
 
     fn pay_dividend(&mut self) {
-        //TODO: Undefer bonds, and pay bonds
         let rev_per_share = self
             .company_details
             .iter()
@@ -1072,7 +1090,13 @@ impl EBRState {
                 (
                     c.0.clone(),
                     if c.1.shares_held > 0 {
-                        div_ceil(self.net_revenue(c.0.clone()), c.1.shares_held as isize)
+                        let rev = self.net_revenue(c.0.clone());
+                        // Ceil over 0, floor under 0
+                        if rev > 0 {
+                            div_ceil(rev, c.1.shares_held as isize)
+                        } else {
+                            div_ceil(rev * -1, c.1.shares_held as isize) * -1
+                        }
                     } else {
                         0
                     },
@@ -1101,8 +1125,14 @@ impl EBRState {
             })
             .collect::<HashMap<u8, isize>>();
 
+        for company in self.company_details.values_mut() {
+            for bond in company.bonds.iter_mut() {
+                bond.deferred = true;
+            }
+        }
+
         self.terminal = self.dividends_paid == 6
-            // TODO: Add bankruptcy and stalemate
+            // TODO: Add bankruptcy
             ||
             // Two of these conditions must be met
              vec![
@@ -1285,7 +1315,19 @@ impl State for EBRState {
     }
 
     fn reward(&self) -> Vec<f64> {
-        vec![0.0f64, 0.0f64, 0.0f64, 0.0f64]
+        // TODO: Improve this - this isn't great. 1 for best, -1 for lost, 0 for others.
+        let mut cash_rewards = vec![0f64; self.player_count as usize];
+        let mut sorted_cash: Vec<(u8, isize)> = self
+            .player_cash
+            .iter()
+            .map(|(player, cash)| (*player, *cash))
+            .collect();
+        sorted_cash.sort_by(|a, b| b.1.cmp(&a.1));
+        cash_rewards[sorted_cash[0].0 as usize] = 1f64;
+        if self.player_count > 1 {
+            cash_rewards[sorted_cash[self.player_count as usize - 1].0 as usize] = -1f64;
+        }
+        cash_rewards
     }
 
     fn terminal(&self) -> bool {
@@ -1340,7 +1382,7 @@ impl Game for EBR {
                             bonds: vec![BondDetails {
                                 bond: Bond {
                                     face_value: d.1.initial_treasury,
-                                    token: d.1.initial_interest,
+                                    coupon: d.1.initial_interest,
                                 },
                                 deferred: true,
                             }],
