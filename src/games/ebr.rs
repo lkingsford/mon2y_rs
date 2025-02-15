@@ -520,6 +520,7 @@ const INITIAL_TRACK: [Track; 4] = [
 ];
 const NARROW_GAUGE_INITIAL: usize = 12;
 const MAX_BUILDS: u8 = 3;
+const NARROW_TRACK_COST: usize = 2;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum EBRAction {
@@ -1016,13 +1017,49 @@ impl EBRState {
                 .sum::<usize>()
     }
 
-    fn possible_narrow_track(&self, company: Company) -> Vec<Coordinate> {
-        // TODO
-        vec![]
+    fn reachable_narrow_track(&self, company: Company) -> Vec<Coordinate> {
+        // This might need to be cached
+        if self.company_details[&company].hq.is_none() {
+            return vec![];
+        }
+        let mut to_visit = HashSet::<Coordinate>::new();
+        let mut visited = HashSet::<Coordinate>::new();
+        to_visit.insert(self.company_details[&company].hq.unwrap());
+        while to_visit.len() > 0 {
+            let coord = to_visit.iter().next().unwrap().clone();
+            let neighbors = get_neighbors(coord.clone());
+            visited.insert(coord.clone());
+            to_visit.remove(&coord);
+            to_visit.extend(neighbors.iter().filter(|n| {
+                !visited.contains(n)
+                    && self
+                        .track
+                        .iter()
+                        .any(|t| t.location == **n && t.track_type == TrackType::Narrow)
+            }));
+        }
+        visited.iter().cloned().collect()
     }
-    fn narrow_cost(&self, t: Coordinate) -> usize {
-        // TODO
-        return 0;
+
+    fn possible_narrow_track(&self, company: Company) -> Vec<Coordinate> {
+        let cash = self.company_details[&company].cash;
+        self.reachable_narrow_track(company)
+            .iter()
+            .map(|t| get_neighbors(*t))
+            .flatten()
+            .filter(|t| {
+                !(self.narrow_cost(*t) as isize > cash
+                    && !self.track.iter().any(|t2| t2.location == *t ))
+                    && TERRAIN_ATTRIBUTES[&TERRAIN[t.1][t.0]].buildable
+
+            })
+            .collect::<BTreeSet<_>>()
+            .iter()
+            .map(|t| t.clone())
+            .collect()
+    }
+    fn narrow_cost(&self, _t: Coordinate) -> usize {
+        return NARROW_TRACK_COST;
     }
 
     fn can_build(&self, company: Company, player: PlayerID) -> bool {
@@ -1174,9 +1211,7 @@ impl State for EBRState {
             Stage::Auction {
                 initial_auction,
                 current_bid,
-                lot,
-                winning_bidder,
-                passed,
+                ..
             } => {
                 let player_cash = *self.player_cash.get(&next_actor).unwrap();
                 if (current_bid.unwrap_or(-1) as isize) < player_cash {
@@ -1320,7 +1355,7 @@ impl State for EBRState {
     fn reward(&self) -> Vec<f64> {
         // TODO: Improve this - this isn't great. 1 for best, -1 for lost, 0 for others.
         if !self.terminal {
-            return vec![0f64; self.player_count as usize];            
+            return vec![0f64; self.player_count as usize];
         }
         let mut cash_rewards = vec![0f64; self.player_count as usize];
         let mut sorted_cash: Vec<(u8, isize)> = self
