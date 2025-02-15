@@ -54,46 +54,46 @@ const ACTION_CUBE_INIT: ActionCubeSpaces = [
     false, false, false, false, false, true, true, true, false, false, true,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Bond {
-    face_value: u32,
-    interest: u32,
+    face_value: usize,
+    token: usize,
 }
 const BONDS: [Bond; 7] = [
     Bond {
         face_value: 5,
-        interest: 1,
+        token: 1,
     },
     Bond {
         face_value: 5,
-        interest: 1,
+        token: 1,
     },
     Bond {
         face_value: 10,
-        interest: 3,
+        token: 3,
     },
     Bond {
         face_value: 10,
-        interest: 3,
+        token: 3,
     },
     Bond {
         face_value: 10,
-        interest: 4,
+        token: 4,
     },
     Bond {
         face_value: 15,
-        interest: 4,
+        token: 4,
     },
     Bond {
         face_value: 15,
-        interest: 5,
+        token: 5,
     },
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 struct BondDetails {
     bond: Bond,
-    issued: bool,
+    deferred: bool,
 }
 
 static INITIAL_CASH: LazyLock<HashMap<u8, u32>> = LazyLock::new(|| {
@@ -241,7 +241,7 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
     });
 
 const INITIAL_RESOURCE_CUBES: [Coordinate; 4] = [(2, 4), (2, 3), (3, 4), (3, 4)];
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct CompanyDetails {
     shares_held: usize,
     shares_remaining: usize,
@@ -250,6 +250,7 @@ struct CompanyDetails {
     available: Option<bool>,
     hq: Option<Coordinate>,
     track_remaining: usize,
+    bonds: Vec<BondDetails>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -528,6 +529,8 @@ pub enum EBRAction {
     ChooseBuildCompany(Company),
     BuildTrack(Coordinate),
     BuildPass,
+    ChooseBondCompany(Company),
+    IssueBond(Company, Bond),
 }
 
 impl Action for EBRAction {
@@ -661,6 +664,10 @@ impl Action for EBRAction {
             }
             EBRAction::MoveCube(from, to) => {
                 let mut state = state.clone();
+        let Actor::Player(next_actor) = state.next_actor else {
+            unreachable!()
+        };
+                state.active_player = next_actor;
                 // Find index of cube to remove
                 let remove_idx = state
                     .action_cubes
@@ -682,6 +689,7 @@ impl Action for EBRAction {
                     ChoosableAction::AuctionShare => state.stage = Stage::ChooseAuctionCompany,
                     ChoosableAction::PayDividend => state.pay_dividend(),
                     ChoosableAction::BuildTrack => state.stage = Stage::ChooseBuildCompany,
+                    ChoosableAction::IssueBond => state.stage = Stage::ChooseBondCompany,
                     _ => warn!("Not implemented yet"),
                 }
                 state
@@ -744,14 +752,26 @@ impl Action for EBRAction {
                     completed_builds,
                 } = state.stage
                 {
-                    state.track.push(Track {
-                        location: *location,
-                        track_type: if !COMPANY_FIXED_DETAILS[&company].private {
-                            TrackType::CompanyOwned(company.clone())
-                        } else {
-                            TrackType::Narrow
-                        },
-                    });
+                    if !COMPANY_FIXED_DETAILS[&company].private {
+                        state.track.push(Track {
+                            location: *location,
+                            track_type: TrackType::CompanyOwned(company.clone()),
+                        });
+                        let cost = state.owned_cost(*location, None) as isize;
+                        if let Some(company_details) = state.company_details.get_mut(&company) {
+                            company_details.cash -= cost;
+                        }
+                    } else {
+                        state.track.push(Track {
+                            location: *location,
+                            track_type: TrackType::Narrow,
+                        });
+                        let cost = state.narrow_cost(*location) as isize;
+                        if let Some(company_details) = state.company_details.get_mut(&company) {
+                            company_details.cash -= cost;
+                        }
+                    }
+
                     if completed_builds < MAX_BUILDS {
                         state.stage = Stage::BuildTrack {
                             company,
@@ -771,6 +791,25 @@ impl Action for EBRAction {
                 let mut state = state.clone();
                 state.stage = Stage::ChooseAction;
                 state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
+                state
+            }
+            EBRAction::ChooseBondCompany(company) => {
+                let mut state = state.clone();
+                state.stage = Stage::ChooseBond(company.clone());
+                state
+            }
+            EBRAction::IssueBond(company, bond) => {
+                let mut state = state.clone();
+                let details = state.company_details.get_mut(&company).unwrap();
+                details.cash += bond.face_value as isize;
+                details.bonds.push(BondDetails {
+                    bond: *bond,
+                    deferred: true,
+                });
+                state.unissued_bonds.retain(|b| *b != *bond);
+                        state.stage = Stage::ChooseAction;
+                        state.next_actor =
+                            Actor::Player((state.active_player + 1) % state.player_count);
                 state
             }
         }
@@ -812,6 +851,8 @@ enum Stage {
     ChooseAuctionCompany,
     ChoosePrivateStart(Company),
     ChooseBuildCompany,
+    ChooseBondCompany,
+    ChooseBond(Company),
 }
 
 #[derive(Clone, Debug)]
@@ -828,7 +869,7 @@ pub struct EBRState {
     revenue: HashMap<Company, isize>,
     dividends_paid: usize,
     company_details: HashMap<Company, CompanyDetails>,
-    bond_details: Vec<BondDetails>,
+    unissued_bonds: Vec<Bond>,
     resource_cubes: Vec<Coordinate>,
     narrow_gauge_remaining: usize,
 }
@@ -856,7 +897,8 @@ impl EBRState {
     }
 
     fn can_auction(&self, company: Company, cash: isize) -> bool {
-        let company_details = self.company_details[&company];
+        // Not quite sure why this needs a clone
+        let company_details = self.company_details[&company].clone();
         let private = COMPANY_FIXED_DETAILS[&company].private;
         ((private
             && company_details
@@ -864,6 +906,26 @@ impl EBRState {
                 .expect("Private Company Details Should Have Available"))
             || (!private && company_details.shares_remaining > 0))
             && (cash >= self.min_bid(company))
+    }
+
+    fn can_issue_any(&self) -> bool {
+        if self.unissued_bonds.is_empty() {
+            return false;
+        }
+        COMPANY_FIXED_DETAILS
+            .iter()
+            .any(|c| self.can_issue(c.0.clone()))
+    }
+    fn can_issue(&self, company: Company) -> bool {
+        if COMPANY_FIXED_DETAILS[&company].private {
+            return false;
+        };
+
+        let Actor::Player(next_actor) = self.next_actor else {
+            unreachable!()
+        };
+
+        self.holdings[&next_actor].contains(&company)
     }
 
     fn can_build_any(&self) -> bool {
@@ -953,6 +1015,10 @@ impl EBRState {
         // TODO
         vec![]
     }
+    fn narrow_cost(&self, t: Coordinate) -> usize {
+        // TODO
+        return 0;
+    }
 
     fn can_build(&self, company: Company, player: PlayerID) -> bool {
         let company_details = self.company_details.get(&company).unwrap();
@@ -998,6 +1064,7 @@ impl EBRState {
     }
 
     fn pay_dividend(&mut self) {
+        //TODO: Undefer bonds, and pay bonds
         let rev_per_share = self
             .company_details
             .iter()
@@ -1046,7 +1113,7 @@ impl EBRState {
                     .count()
                     == 0,
                 // <= 2 bonds remaining
-                self.bond_details.iter().filter(|b| !b.issued).count() <= 2,
+                self.unissued_bonds.len() <= 2,
                 // TODO: 3/4 charters have no remaining trains
                 // <=3 resource cubes on board
                 self.resource_cubes.len() <= 3,
@@ -1121,7 +1188,6 @@ impl State for EBRState {
                 // placeholders
                 let can_merge_any = true;
                 let can_take_any = true;
-                let can_issue_any = true;
                 if !can_merge_any {
                     addable_action_cubes.remove(&ChoosableAction::Merge);
                 };
@@ -1131,7 +1197,7 @@ impl State for EBRState {
                 if !can_take_any {
                     addable_action_cubes.remove(&ChoosableAction::TakeResources);
                 }
-                if !can_issue_any {
+                if !self.can_issue_any() {
                     addable_action_cubes.remove(&ChoosableAction::IssueBond);
                 }
                 if !self.can_auction_any() {
@@ -1201,6 +1267,16 @@ impl State for EBRState {
                     actions
                 }
             }
+            Stage::ChooseBondCompany => COMPANY_FIXED_DETAILS
+                .iter()
+                .filter(|c| self.can_issue(c.0.clone()))
+                .map(|c| EBRAction::ChooseBondCompany(c.0.clone()))
+                .collect(),
+            Stage::ChooseBond(company) => self
+                .unissued_bonds
+                .iter()
+                .map(|bond| EBRAction::IssueBond(*company, *bond))
+                .collect(),
             _ => {
                 warn!("Unimplemented Stage in PermittedActions");
                 vec![]
@@ -1257,21 +1333,22 @@ impl Game for EBR {
                             shares_held: 0,
                             shares_remaining: d.1.stock_available,
                             merged: if d.1.private { Some(false) } else { None },
-                            cash: 0,
+                            cash: d.1.initial_treasury as isize,
                             available: if d.1.private { Some(false) } else { None },
                             hq: d.1.starting,
                             track_remaining: d.1.track_available,
+                            bonds: vec![BondDetails {
+                                bond: Bond {
+                                    face_value: d.1.initial_treasury,
+                                    token: d.1.initial_interest,
+                                },
+                                deferred: true,
+                            }],
                         },
                     )
                 })
                 .collect(),
-            bond_details: BONDS
-                .iter()
-                .map(|b| BondDetails {
-                    bond: b.clone(),
-                    issued: false,
-                })
-                .collect(),
+            unissued_bonds: BONDS.iter().map(|b| b.clone()).collect::<Vec<Bond>>(),
             resource_cubes: INITIAL_RESOURCE_CUBES.to_vec(),
             narrow_gauge_remaining: NARROW_GAUGE_INITIAL,
         }
@@ -1327,4 +1404,3 @@ fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
         ]
     }
 }
-
