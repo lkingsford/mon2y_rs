@@ -90,6 +90,12 @@ const BONDS: [Bond; 7] = [
     },
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Hash)]
+struct BondDetails {
+    bond: Bond,
+    issued: bool,
+}
+
 static INITIAL_CASH: LazyLock<HashMap<u8, u32>> = LazyLock::new(|| {
     let mut m = HashMap::new();
     m.insert(2, 20);
@@ -234,6 +240,9 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
         m
     });
 
+const INITIAL_RESOURCE_CUBES: [Coordinate;4] = 
+
+[(2,4),(2,3), (3,4), (3,4)];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CompanyDetails {
     shares_held: usize,
@@ -687,6 +696,7 @@ impl Action for EBRAction {
             }
             EBRAction::StartPrivateAt(company, location) => {
                 let mut state = state.clone();
+                // TODO: Add resource cubes around
                 state.company_details.get_mut(company).unwrap().hq = Some(*location);
                 state.stage = Stage::Auction {
                     initial_auction: false,
@@ -695,6 +705,18 @@ impl Action for EBRAction {
                     winning_bidder: None,
                     passed: HashSet::new(),
                 };
+                // Place resource cubes around
+                let mut potential_locations = get_neighbors(location.clone());
+                potential_locations.push(*location);
+                for location in potential_locations {
+                    let terrain = TERRAIN[location.1][location.0];
+                    match terrain {
+                        Terrain::Forest => {state.resource_cubes.push(location)},
+                        Terrain::Mountain => {state.resource_cubes.push(location); state.resource_cubes.push(location);}
+                        _ => {}
+                    };
+                }
+
                 state
             }
         }
@@ -739,11 +761,11 @@ enum Stage {
 
 #[derive(Clone, Debug)]
 pub struct EBRState {
+    terminal: bool,
     next_actor: Actor<EBRAction>,
     active_player: PlayerID,
     player_count: u8,
     track: Vec<Track>,
-    resources: Vec<Coordinate>,
     stage: Stage,
     holdings: HashMap<PlayerID, Vec<Company>>,
     player_cash: HashMap<PlayerID, isize>,
@@ -751,6 +773,8 @@ pub struct EBRState {
     revenue: HashMap<Company, isize>,
     dividends_paid: usize,
     company_details: HashMap<Company, CompanyDetails>,
+    bond_details: Vec<BondDetails>,
+    resource_cubes: Vec<Coordinate>,
 }
 
 impl EBRState {
@@ -843,6 +867,29 @@ impl EBRState {
                 )
             })
             .collect::<HashMap<u8, isize>>();
+
+        self.terminal = self.dividends_paid == 6
+            // TODO: Add bankruptcy and stalemate
+            ||
+            // Two of these conditions must be met
+             vec![
+                // No shares unsold
+                self.company_details
+                    .iter()
+                    .filter(|c| c.1.shares_remaining > 0)
+                    .count()
+                    == 0,
+                // <= 2 bonds remaining
+                self.bond_details.iter().filter(|b| !b.issued).count() <= 2,
+                // TODO: 3/4 charters have no remaining trains
+                // <=3 resource cubes on board
+                self.resource_cubes.len() <= 3,
+                    
+            ]
+            .iter()
+            .filter(|criteria| **criteria)
+            .count()
+                >= 2
     }
 }
 
@@ -971,7 +1018,7 @@ impl State for EBRState {
     }
 
     fn terminal(&self) -> bool {
-        false
+        self.terminal
     }
 }
 
@@ -985,10 +1032,10 @@ impl Game for EBR {
 
     fn init_game(&self) -> Self::StateType {
         EBRState {
+            terminal: false,
             next_actor: Actor::Player(0),
             player_count: self.player_count,
             track: INITIAL_TRACK.to_vec(),
-            resources: vec![],
             active_player: 0,
             stage: Stage::Auction {
                 initial_auction: true,
@@ -1022,11 +1069,18 @@ impl Game for EBR {
                     )
                 })
                 .collect(),
+            bond_details: BONDS
+                .iter()
+                .map(|b| BondDetails {
+                    bond: b.clone(),
+                    issued: false,
+                })
+                .collect(),
+            resource_cubes: INITIAL_RESOURCE_CUBES.to_vec()
         }
     }
 
     fn visualise_state(&self, state: &Self::StateType) {
-        println!("Resources: {:?}", state.resources);
         println!("Track:");
         for track in &state.track {
             println!("{:?}", track);
@@ -1041,4 +1095,37 @@ impl Game for EBR {
 fn div_ceil(numerator: isize, denominator: isize) -> isize {
     // Slightly cheeky
     (numerator + denominator - 1) / denominator
+}
+
+/// Game is a hex map with pointy sides
+/// Each row is top, bottom, top, bottom
+///
+/// 1,1        3, 1       5,1
+///      2,1        4, 1
+/// 1,2        3, 2,      5,2
+///      2,2        4, 2
+/// 1,3        3, 3       5,3
+///      2,3        4, 3
+/// This doesn't take into account the map
+fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
+    let (x, y) = coord;
+    if y % 2 == 1 {
+        vec![
+            (x - 1, y - 1),
+            (x, y - 1),
+            (x + 1, y - 1),
+            (x + 1, y),
+            (x, y + 1),
+            (x - 1, y),
+        ]
+    } else {
+        vec![
+            (x - 1, y),
+            (x, y - 1),
+            (x + 1, y),
+            (x + 1, y + 1),
+            (x, y + 1),
+            (x - 1, y + 1),
+        ]
+    }
 }
