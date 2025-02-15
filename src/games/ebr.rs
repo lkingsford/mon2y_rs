@@ -690,7 +690,7 @@ impl Action for EBRAction {
                     ChoosableAction::PayDividend => state.pay_dividend(),
                     ChoosableAction::BuildTrack => state.stage = Stage::ChooseBuildCompany,
                     ChoosableAction::IssueBond => state.stage = Stage::ChooseBondCompany,
-                    _ => warn!("Not implemented yet"),
+                    _ => {} //warn!("Not implemented yet"),
                 }
                 state
             }
@@ -1109,7 +1109,6 @@ impl EBRState {
             };
             Actor::Player((&actor + 1) % self.player_count)
         };
-        self.dividends_paid = self.dividends_paid + 1;
         self.player_cash = self
             .player_cash
             .iter()
@@ -1130,6 +1129,7 @@ impl EBRState {
                 bond.deferred = true;
             }
         }
+        self.dividends_paid += 1;
 
         self.terminal = self.dividends_paid == 6
             // TODO: Add bankruptcy
@@ -1167,6 +1167,9 @@ impl State for EBRState {
         let Actor::Player(next_actor) = self.next_actor else {
             unreachable!()
         };
+        if self.terminal {
+            return vec![];
+        }
         match &self.stage {
             Stage::Auction {
                 initial_auction,
@@ -1316,6 +1319,9 @@ impl State for EBRState {
 
     fn reward(&self) -> Vec<f64> {
         // TODO: Improve this - this isn't great. 1 for best, -1 for lost, 0 for others.
+        if !self.terminal {
+            return vec![0f64; self.player_count as usize];            
+        }
         let mut cash_rewards = vec![0f64; self.player_count as usize];
         let mut sorted_cash: Vec<(u8, isize)> = self
             .player_cash
