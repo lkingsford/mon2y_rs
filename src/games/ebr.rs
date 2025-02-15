@@ -240,9 +240,7 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
         m
     });
 
-const INITIAL_RESOURCE_CUBES: [Coordinate;4] = 
-
-[(2,4),(2,3), (3,4), (3,4)];
+const INITIAL_RESOURCE_CUBES: [Coordinate; 4] = [(2, 4), (2, 3), (3, 4), (3, 4)];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CompanyDetails {
     shares_held: usize,
@@ -251,11 +249,12 @@ struct CompanyDetails {
     cash: isize,
     available: Option<bool>,
     hq: Option<Coordinate>,
+    track_remaining: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
 struct CommonAttributes {
-    feature_cost: u32,
+    build_cost: u32,
     symbol: Option<&'static str>,
     buildable: bool,
     multiple_allowed: bool,
@@ -279,7 +278,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Nothing,
         CommonAttributes {
-            feature_cost: 0,
+            build_cost: 0,
             symbol: None,
             buildable: false,
             multiple_allowed: false,
@@ -289,7 +288,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Plain,
         CommonAttributes {
-            feature_cost: 3,
+            build_cost: 3,
             symbol: Some("\u{1B}[37m-"),
             buildable: true,
             multiple_allowed: true,
@@ -299,7 +298,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Forest,
         CommonAttributes {
-            feature_cost: 4,
+            build_cost: 4,
             symbol: Some("\u{1B}[32m="),
             buildable: true,
             multiple_allowed: false,
@@ -309,7 +308,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Mountain,
         CommonAttributes {
-            feature_cost: 6,
+            build_cost: 6,
             symbol: Some("\u{1B}[32m^"),
             multiple_allowed: false,
             buildable: true,
@@ -319,7 +318,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Town,
         CommonAttributes {
-            feature_cost: 4,
+            build_cost: 4,
             symbol: Some("\u{1B}[33mT"),
             buildable: true,
             multiple_allowed: true,
@@ -329,7 +328,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Port,
         CommonAttributes {
-            feature_cost: 5,
+            build_cost: 5,
             symbol: Some("\u{1B}[31mP"),
             buildable: true,
             multiple_allowed: true,
@@ -515,6 +514,8 @@ const INITIAL_TRACK: [Track; 4] = [
         track_type: TrackType::Narrow,
     },
 ];
+const NARROW_GAUGE_INITIAL: usize = 12;
+const MAX_BUILDS: u8 = 3;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum EBRAction {
@@ -524,6 +525,9 @@ pub enum EBRAction {
     Stalemate,
     ChooseAuctionCompany(Company),
     StartPrivateAt(Company, Coordinate),
+    ChooseBuildCompany(Company),
+    BuildTrack(Coordinate),
+    BuildPass,
 }
 
 impl Action for EBRAction {
@@ -531,8 +535,9 @@ impl Action for EBRAction {
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
         match self {
             EBRAction::Stalemate => {
-                todo!()
-                // terminal
+                let mut state = state.clone();
+                state.terminal = true;
+                state
             }
             EBRAction::Bid(bid) => {
                 let mut state = state.clone();
@@ -610,6 +615,7 @@ impl Action for EBRAction {
                             let company_details = state.company_details.get_mut(&lot).unwrap();
                             company_details.shares_held += 1;
                             company_details.shares_remaining -= 1;
+                            company_details.cash += current_bid.unwrap();
                         }
                         if COMPANY_FIXED_DETAILS[&lot].private {
                             let index = PRIVATE_ORDER.iter().position(|c| *c == lot).unwrap();
@@ -675,6 +681,7 @@ impl Action for EBRAction {
                 match to {
                     ChoosableAction::AuctionShare => state.stage = Stage::ChooseAuctionCompany,
                     ChoosableAction::PayDividend => state.pay_dividend(),
+                    ChoosableAction::BuildTrack => state.stage = Stage::ChooseBuildCompany,
                     _ => warn!("Not implemented yet"),
                 }
                 state
@@ -711,12 +718,59 @@ impl Action for EBRAction {
                 for location in potential_locations {
                     let terrain = TERRAIN[location.1][location.0];
                     match terrain {
-                        Terrain::Forest => {state.resource_cubes.push(location)},
-                        Terrain::Mountain => {state.resource_cubes.push(location); state.resource_cubes.push(location);}
+                        Terrain::Forest => state.resource_cubes.push(location),
+                        Terrain::Mountain => {
+                            state.resource_cubes.push(location);
+                            state.resource_cubes.push(location);
+                        }
                         _ => {}
                     };
                 }
 
+                state
+            }
+            EBRAction::ChooseBuildCompany(company) => {
+                let mut state = state.clone();
+                state.stage = Stage::BuildTrack {
+                    company: *company,
+                    completed_builds: 0,
+                };
+                state
+            }
+            EBRAction::BuildTrack(location) => {
+                let mut state = state.clone();
+                if let Stage::BuildTrack {
+                    company,
+                    completed_builds,
+                } = state.stage
+                {
+                    state.track.push(Track {
+                        location: *location,
+                        track_type: if !COMPANY_FIXED_DETAILS[&company].private {
+                            TrackType::CompanyOwned(company.clone())
+                        } else {
+                            TrackType::Narrow
+                        },
+                    });
+                    if completed_builds < MAX_BUILDS {
+                        state.stage = Stage::BuildTrack {
+                            company,
+                            completed_builds: completed_builds + 1,
+                        }
+                    } else {
+                        state.stage = Stage::ChooseAction;
+                        state.next_actor =
+                            Actor::Player((state.active_player + 1) % state.player_count);
+                    }
+                    state
+                } else {
+                    unreachable!()
+                }
+            }
+            EBRAction::BuildPass => {
+                let mut state = state.clone();
+                state.stage = Stage::ChooseAction;
+                state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
                 state
             }
         }
@@ -757,6 +811,7 @@ enum Stage {
     },
     ChooseAuctionCompany,
     ChoosePrivateStart(Company),
+    ChooseBuildCompany,
 }
 
 #[derive(Clone, Debug)]
@@ -775,6 +830,7 @@ pub struct EBRState {
     company_details: HashMap<Company, CompanyDetails>,
     bond_details: Vec<BondDetails>,
     resource_cubes: Vec<Coordinate>,
+    narrow_gauge_remaining: usize,
 }
 
 impl EBRState {
@@ -808,6 +864,116 @@ impl EBRState {
                 .expect("Private Company Details Should Have Available"))
             || (!private && company_details.shares_remaining > 0))
             && (cash >= self.min_bid(company))
+    }
+
+    fn can_build_any(&self) -> bool {
+        let Actor::Player(next_actor) = self.next_actor else {
+            unreachable!()
+        };
+        COMPANY_FIXED_DETAILS
+            .iter()
+            .any(|c| self.can_build(c.0.clone(), next_actor))
+    }
+
+    fn possible_owned_track(&self, company: Company) -> Vec<Coordinate> {
+        let company_details = self.company_details.get(&company).unwrap();
+        self.track
+            .iter()
+            .filter(|t| {
+                // All owned track
+                t.track_type == TrackType::CompanyOwned(company.clone())
+            })
+            // All neighboring
+            .map(|t| get_neighbors(t.location))
+            .flatten()
+            .collect::<HashSet<Coordinate>>() // Unique
+            .iter()
+            .filter_map(|t| {
+                let terrain = TERRAIN[t.1][t.0];
+                let attr = TERRAIN_ATTRIBUTES[&terrain];
+                if !attr.buildable {
+                    return None;
+                }
+                let other_track_in_location = self
+                    .track
+                    .iter()
+                    .map(|ot| ot.clone())
+                    .filter(|ot| ot.location == *t)
+                    .collect::<Vec<_>>();
+                // Can't build more track if not permitted
+                if other_track_in_location.len() > 0 && !attr.multiple_allowed {
+                    return None;
+                }
+                // Company can't own multiple track in location
+                if other_track_in_location
+                    .iter()
+                    .any(|t| t.track_type == TrackType::CompanyOwned(company.clone()))
+                {
+                    return None;
+                }
+                // Make sure co can pay
+                let cost = self.owned_cost(*t, Some(other_track_in_location));
+                if (company_details.cash >= cost as isize) {
+                    Some(*t)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn owned_cost(&self, t: Coordinate, other_track_in_location: Option<Vec<Track>>) -> usize {
+        // Other track in location is optional - only calculate if not specified
+        let other_track_in_location = other_track_in_location.unwrap_or(
+            self.track
+                .iter()
+                .filter_map(|ot| {
+                    if ot.location == t {
+                        Some(ot.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<Track>>(),
+        );
+
+        // Slight repetition of other places where this is called here
+        let terrain = TERRAIN[t.1][t.0];
+
+        let attr = TERRAIN_ATTRIBUTES[&terrain];
+        (1 + other_track_in_location.len()) * attr.build_cost as usize
+            + FEATURES
+                .get(&t)
+                .iter()
+                .map(|f| f.additional_cost)
+                .sum::<usize>()
+    }
+
+    fn possible_narrow_track(&self, company: Company) -> Vec<Coordinate> {
+        // TODO
+        vec![]
+    }
+
+    fn can_build(&self, company: Company, player: PlayerID) -> bool {
+        let company_details = self.company_details.get(&company).unwrap();
+        if !self.holdings.get(&player).unwrap().contains(&company) {
+            return false;
+        }
+        if company_details.merged.unwrap_or(false) {
+            return false;
+        }
+        let company_fixed_details = COMPANY_FIXED_DETAILS.get(&company).unwrap();
+        if !company_fixed_details.private {
+            if company_fixed_details.track_available == 0 {
+                return false;
+            }
+            self.possible_owned_track(company).len() > 0
+        } else {
+            if self.narrow_gauge_remaining == 0 {
+                return false;
+            }
+            self.possible_narrow_track(company).len() > 0
+        }
     }
 
     fn net_revenue(&self, company: Company) -> isize {
@@ -954,14 +1120,12 @@ impl State for EBRState {
                     .collect::<BTreeSet<ChoosableAction>>();
                 // placeholders
                 let can_merge_any = true;
-                let can_build_any = true;
                 let can_take_any = true;
                 let can_issue_any = true;
-                let can_auction_any = self.can_auction_any();
                 if !can_merge_any {
                     addable_action_cubes.remove(&ChoosableAction::Merge);
                 };
-                if !can_build_any {
+                if !self.can_build_any() {
                     addable_action_cubes.remove(&ChoosableAction::BuildTrack);
                 }
                 if !can_take_any {
@@ -970,7 +1134,7 @@ impl State for EBRState {
                 if !can_issue_any {
                     addable_action_cubes.remove(&ChoosableAction::IssueBond);
                 }
-                if !can_auction_any {
+                if !self.can_auction_any() {
                     addable_action_cubes.remove(&ChoosableAction::AuctionShare);
                 }
 
@@ -1006,6 +1170,37 @@ impl State for EBRState {
                 })
                 .map(|location| EBRAction::StartPrivateAt(*company, *location))
                 .collect(),
+            Stage::ChooseBuildCompany => COMPANY_FIXED_DETAILS
+                .iter()
+                .filter(|c| self.can_build(c.0.clone(), next_actor))
+                .map(|c| EBRAction::ChooseBuildCompany(c.0.clone()))
+                .collect(),
+            Stage::BuildTrack {
+                company,
+                completed_builds,
+            } => {
+                if COMPANY_FIXED_DETAILS[company].private {
+                    let mut actions = self
+                        .possible_narrow_track(*company)
+                        .iter()
+                        .map(|coord| EBRAction::BuildTrack(*coord))
+                        .collect::<Vec<EBRAction>>();
+                    if *completed_builds > 0 {
+                        actions.push(EBRAction::BuildPass)
+                    };
+                    actions
+                } else {
+                    let mut actions = self
+                        .possible_owned_track(*company)
+                        .iter()
+                        .map(|coord| EBRAction::BuildTrack(*coord))
+                        .collect::<Vec<EBRAction>>();
+                    if *completed_builds > 0 {
+                        actions.push(EBRAction::BuildPass)
+                    };
+                    actions
+                }
+            }
             _ => {
                 warn!("Unimplemented Stage in PermittedActions");
                 vec![]
@@ -1065,6 +1260,7 @@ impl Game for EBR {
                             cash: 0,
                             available: if d.1.private { Some(false) } else { None },
                             hq: d.1.starting,
+                            track_remaining: d.1.track_available,
                         },
                     )
                 })
@@ -1076,7 +1272,8 @@ impl Game for EBR {
                     issued: false,
                 })
                 .collect(),
-            resource_cubes: INITIAL_RESOURCE_CUBES.to_vec()
+            resource_cubes: INITIAL_RESOURCE_CUBES.to_vec(),
+            narrow_gauge_remaining: NARROW_GAUGE_INITIAL,
         }
     }
 
@@ -1094,6 +1291,7 @@ impl Game for EBR {
 
 fn div_ceil(numerator: isize, denominator: isize) -> isize {
     // Slightly cheeky
+    // Look - it's used enough places that it's worth it, and frankly, it's clearer like this
     (numerator + denominator - 1) / denominator
 }
 
@@ -1111,21 +1309,22 @@ fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
     let (x, y) = coord;
     if y % 2 == 1 {
         vec![
-            (x - 1, y - 1),
-            (x, y - 1),
-            (x + 1, y - 1),
-            (x + 1, y),
-            (x, y + 1),
-            (x - 1, y),
+            (x - 1, y - 1), // Top-left
+            (x + 1, y - 1), // Top-right
+            (x + 1, y),     // Right
+            (x + 1, y + 1), // Bottom-right
+            (x, y + 1),     // Bottom-left
+            (x - 1, y),     // Left
         ]
     } else {
         vec![
-            (x - 1, y),
-            (x, y - 1),
-            (x + 1, y),
-            (x + 1, y + 1),
-            (x, y + 1),
-            (x - 1, y + 1),
+            (x, y - 1),     // Top-left
+            (x + 1, y - 1), // Top-right
+            (x + 1, y),     // Right
+            (x, y + 1),     // Bottom-right
+            (x - 1, y + 1), // Bottom-left
+            (x - 1, y),     // Left
         ]
     }
 }
+
