@@ -1,7 +1,7 @@
 use linked_hash_set::LinkedHashSet;
 use log::warn;
 use std::cmp::{max, min};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::LazyLock;
 
@@ -931,6 +931,75 @@ impl EBRState {
         self.holdings[&next_actor].contains(&company)
     }
 
+    fn can_merge_any(&self) -> bool {
+        let Actor::Player(next_actor) = self.next_actor else {
+            unreachable!()
+        };
+
+        self.merge_options(next_actor).len() > 0
+    }
+
+    fn merge_options(&self, player: PlayerID) -> BTreeSet<(Company, Company)> {
+        self.holdings[&player]
+            .iter()
+            .map(|c| c.clone())
+            .collect::<BTreeSet<Company>>()
+            .iter()
+            .filter(|c| {
+                !COMPANY_FIXED_DETAILS[&c].private
+                    || (COMPANY_FIXED_DETAILS[&c].private
+                        && !self.company_details[&c].merged.unwrap_or(false))
+            })
+            .map(|c| {
+                if COMPANY_FIXED_DETAILS[&c].private {
+                    COMPANY_FIXED_DETAILS
+                        .iter()
+                        .filter(|c2| {
+                            !COMPANY_FIXED_DETAILS[&c2.0].private
+                                && (self.company_details[&c2.0].shares_remaining > 0 || 
+                                //TODO: Make the EBRC here data somewhere
+                                *c2.0 == Company::EBRC)
+                        })
+                        .map(|c2| (c.clone(), c2.0.clone()))
+                        .collect::<Vec<(Company, Company)>>()
+                } else {
+                    COMPANY_FIXED_DETAILS
+                        .iter()
+                        .filter(|c2| {
+                            COMPANY_FIXED_DETAILS[&c2.0].private
+                                && !self.company_details[&c2.0].merged.unwrap_or(false)
+                        })
+                        .map(|c2| (c.clone(), c2.0.clone()))
+                        .collect()
+                }
+            })
+            .flatten()
+            .collect::<BTreeSet<(Company, Company)>>()
+            .iter()
+            .map(|c| c.clone())
+            .filter(
+                // Check if actually connected
+                // Left to last because slowest
+                |(private_co, public_co)| self.connected_to(public_co.clone(), private_co.clone()),
+            )
+            .collect()
+    }
+
+    fn connected_to(&self, private_co: Company, public_co: Company) -> bool {
+        self.reachable_narrow_track(private_co)
+            .iter()
+            .map(|t| get_neighbors(*t))
+            .flatten()
+            .collect::<HashSet<_>>()
+            .iter()
+            .any(|t| {
+                // There should be a better way to do this?
+                self.track.iter().any(|ot| {
+                    ot.location == *t && ot.track_type == TrackType::CompanyOwned(public_co.clone())
+                })
+            })
+    }
+
     fn can_build_any(&self) -> bool {
         let Actor::Player(next_actor) = self.next_actor else {
             unreachable!()
@@ -1049,15 +1118,15 @@ impl EBRState {
             .flatten()
             .filter(|t| {
                 !(self.narrow_cost(*t) as isize > cash
-                    && !self.track.iter().any(|t2| t2.location == *t ))
+                    && !self.track.iter().any(|t2| t2.location == *t))
                     && TERRAIN_ATTRIBUTES[&TERRAIN[t.1][t.0]].buildable
-
             })
             .collect::<BTreeSet<_>>()
             .iter()
             .map(|t| t.clone())
             .collect()
     }
+
     fn narrow_cost(&self, _t: Coordinate) -> usize {
         return NARROW_TRACK_COST;
     }
@@ -1254,9 +1323,8 @@ impl State for EBRState {
                     .map(|(i, _)| ACTION_CUBE_SPACES[i])
                     .collect::<BTreeSet<ChoosableAction>>();
                 // placeholders
-                let can_merge_any = true;
                 let can_take_any = true;
-                if !can_merge_any {
+                if !self.can_merge_any() {
                     addable_action_cubes.remove(&ChoosableAction::Merge);
                 };
                 if !self.can_build_any() {
