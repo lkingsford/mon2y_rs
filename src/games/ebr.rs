@@ -985,17 +985,15 @@ impl EBRState {
     }
 
     fn connected_to(&self, private_co: Company, public_co: Company) -> bool {
+        let public_co_track = TrackType::CompanyOwned(public_co);
+
         self.reachable_narrow_track(private_co)
             .iter()
-            .map(|t| get_neighbors(*t))
-            .flatten()
-            .collect::<HashSet<_>>()
-            .iter()
-            .any(|t| {
-                // There should be a better way to do this?
-                self.track.iter().any(|ot| {
-                    ot.location == *t && ot.track_type == TrackType::CompanyOwned(public_co.clone())
-                })
+            .flat_map(|&t| get_neighbors(t))
+            .any(|neighbor| {
+                self.track
+                    .iter()
+                    .any(|ot| ot.location == neighbor && ot.track_type == public_co_track)
             })
     }
 
@@ -1534,23 +1532,23 @@ fn div_ceil(numerator: isize, denominator: isize) -> isize {
 /// This doesn't take into account the map
 fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
     let (x, y) = coord;
-    if y % 2 == 1 {
+    if x % 2 == 1 {
         vec![
-            (x - 1, y - 1), // Top-left
-            (x + 1, y - 1), // Top-right
-            (x + 1, y),     // Right
-            (x + 1, y + 1), // Bottom-right
-            (x, y + 1),     // Bottom-left
-            (x - 1, y),     // Left
+            (x, y - 1),
+            (x + 1, y - 1),
+            (x + 1, y),
+            (x, y + 1),
+            (x - 1, y),
+            (x - 1, y - 1),
         ]
     } else {
         vec![
-            (x, y - 1),     // Top-left
-            (x + 1, y - 1), // Top-right
-            (x + 1, y),     // Right
-            (x, y + 1),     // Bottom-right
-            (x - 1, y + 1), // Bottom-left
-            (x - 1, y),     // Left
+            (x, y - 1),
+            (x + 1, y),
+            (x + 1, y + 1),
+            (x, y + 1),
+            (x - 1, y + 1),
+            (x - 1, y ),
         ]
     }
 }
@@ -1576,12 +1574,16 @@ mod test {
     fn test_connected_to() {
         // Test will break if HQ of GT or EBRC moved
         let mut game_state = init_game();
-        
+
         // Assert GT initially connected to EBRC
         assert!(game_state.connected_to(Company::GT, Company::EBRC));
         // And not initially connected to LW
         assert!(!game_state.connected_to(Company::GT, Company::LW));
         // But connected if we build some track between them
+        game_state.track.push(Track {
+            location: (2, 3),
+            track_type: TrackType::Narrow,
+        });
         game_state.track.push(Track {
             location: (3, 3),
             track_type: TrackType::Narrow,
@@ -1646,6 +1648,35 @@ mod test {
                     (3, 4),
                     (4, 4)
                 ]
+                .iter()
+                .map(|t| t.clone())
+                .collect::<HashSet<Coordinate>>()
+        );
+    }
+
+    #[test]
+    fn test_get_neighbors() {
+        let expected1 = vec![(1, 4), (2, 3), (3, 4), (3, 5), (2, 5), (1, 5)];
+        let actual1 = get_neighbors((2, 4));
+        assert_eq!(
+            expected1
+                .iter()
+                .map(|t| t.clone())
+                .collect::<HashSet<Coordinate>>(),
+            actual1
+                .iter()
+                .map(|t| t.clone())
+                .collect::<HashSet<Coordinate>>()
+        );
+
+        let expected2 = vec![(2, 4), (2, 3), (3, 3), (4, 3), (4, 4), (3, 5)];
+        let actual2 = get_neighbors((3, 4));
+        assert_eq!(
+            expected2
+                .iter()
+                .map(|t| t.clone())
+                .collect::<HashSet<Coordinate>>(),
+            actual2
                 .iter()
                 .map(|t| t.clone())
                 .collect::<HashSet<Coordinate>>()
