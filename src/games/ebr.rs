@@ -950,7 +950,7 @@ impl EBRState {
                     || (COMPANY_FIXED_DETAILS[&c].private
                         && !self.company_details[&c].merged.unwrap_or(false))
             })
-            .map(|c| {
+            .flat_map(|c| {
                 if COMPANY_FIXED_DETAILS[&c].private {
                     COMPANY_FIXED_DETAILS
                         .iter()
@@ -973,7 +973,6 @@ impl EBRState {
                         .collect()
                 }
             })
-            .flatten()
             .collect::<BTreeSet<(Company, Company)>>()
             .iter()
             .map(|c| c.clone())
@@ -1553,5 +1552,103 @@ fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
             (x - 1, y + 1), // Bottom-left
             (x - 1, y),     // Left
         ]
+    }
+}
+
+mod test {
+    use std::collections::hash_set;
+
+    use super::*;
+
+    fn init_game() -> EBRState {
+        let mut game = EBR { player_count: 3 };
+        game.init_game()
+    }
+
+    #[test]
+    fn test_div_ceil() {
+        assert_eq!(div_ceil(10, 3), 4);
+        assert_eq!(div_ceil(10, 4), 3);
+        assert_eq!(div_ceil(10, 5), 2);
+    }
+
+    #[test]
+    fn test_connected_to() {
+        // Test will break if HQ of GT or EBRC moved
+        let mut game_state = init_game();
+        
+        // Assert GT initially connected to EBRC
+        assert!(game_state.connected_to(Company::GT, Company::EBRC));
+        // And not initially connected to LW
+        assert!(!game_state.connected_to(Company::GT, Company::LW));
+        // But connected if we build some track between them
+        game_state.track.push(Track {
+            location: (3, 3),
+            track_type: TrackType::Narrow,
+        });
+        game_state.track.push(Track {
+            location: (4, 3),
+            track_type: TrackType::Narrow,
+        });
+        game_state.track.push(Track {
+            location: (5, 3),
+            track_type: TrackType::Narrow,
+        });
+        game_state.track.push(Track {
+            location: (6, 3),
+            track_type: TrackType::CompanyOwned(Company::LW),
+        });
+        game_state.track.push(Track {
+            location: (7, 3),
+            track_type: TrackType::CompanyOwned(Company::LW),
+        });
+        game_state.track.push(Track {
+            location: (8, 3),
+            track_type: TrackType::CompanyOwned(Company::LW),
+        });
+        assert!(game_state.connected_to(Company::GT, Company::LW));
+    }
+
+    #[test]
+    fn test_reachable_narrow_track() {
+        // Test will break if HQ of GT moved
+        let mut game_state = init_game();
+
+        // Check GT has its HQ initially
+        assert!(
+            game_state.reachable_narrow_track(Company::GT)
+                == vec![COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap()]
+        );
+
+        // Check that nearby track not connected
+        game_state.track.push(Track {
+            location: (4, 4),
+            track_type: TrackType::Narrow,
+        });
+        assert!(
+            game_state.reachable_narrow_track(Company::GT)
+                == vec![COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap()]
+        );
+
+        // Check that once connected, all three are there
+        game_state.track.push(Track {
+            location: (3, 4),
+            track_type: TrackType::Narrow,
+        });
+        assert!(
+            game_state
+                .reachable_narrow_track(Company::GT)
+                .iter()
+                .map(|t| t.clone())
+                .collect::<HashSet<Coordinate>>()
+                == vec![
+                    COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap(),
+                    (3, 4),
+                    (4, 4)
+                ]
+                .iter()
+                .map(|t| t.clone())
+                .collect::<HashSet<Coordinate>>()
+        );
     }
 }
