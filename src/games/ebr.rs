@@ -535,6 +535,7 @@ pub enum EBRAction {
     BuildPass,
     ChooseBondCompany(Company),
     IssueBond(Company, Bond),
+    Merge(Company, Company),
 }
 
 impl Action for EBRAction {
@@ -691,6 +692,7 @@ impl Action for EBRAction {
                     ChoosableAction::PayDividend => state.pay_dividend(),
                     ChoosableAction::BuildTrack => state.stage = Stage::ChooseBuildCompany,
                     ChoosableAction::IssueBond => state.stage = Stage::ChooseBondCompany,
+                    ChoosableAction::Merge => state.stage = Stage::ChooseMerge,
                     _ => {} //warn!("Not implemented yet"),
                 }
                 state
@@ -815,6 +817,46 @@ impl Action for EBRAction {
                 state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
                 state
             }
+            EBRAction::Merge(private, company) => {
+                let mut state = state.clone();
+                {
+                    let (private_cash, private_bonds) = {
+                        let private_details = state.company_details.get_mut(&private).unwrap();
+                        private_details.merged = Some(true);
+                        (private_details.cash, private_details.bonds.clone())
+                    };
+                    let company_details = state.company_details.get_mut(&company).unwrap();
+                    company_details.cash += private_cash;
+                    company_details.bonds.extend(private_bonds.clone());
+                    // TODO: Data drive the EBRC exception
+                    if company != &Company::EBRC {
+                        company_details.shares_held += 1;
+                        company_details.shares_remaining -= 1;
+                    }
+                }
+                state.holdings = state
+                    .holdings
+                    .iter()
+                    .map(|(&player, companies)| {
+                        (
+                            player,
+                            companies
+                                .iter()
+                                .map(|c| {
+                                    if c != private {
+                                        c.clone()
+                                    } else {
+                                        company.clone()
+                                    }
+                                })
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                state.stage = Stage::ChooseAction;
+                state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
+                state
+            }
         }
     }
 }
@@ -856,6 +898,7 @@ enum Stage {
     ChooseBuildCompany,
     ChooseBondCompany,
     ChooseBond(Company),
+    ChooseMerge,
 }
 
 #[derive(Clone, Debug)]
@@ -954,22 +997,22 @@ impl EBRState {
                 if COMPANY_FIXED_DETAILS[&c].private {
                     COMPANY_FIXED_DETAILS
                         .iter()
-                        .filter(|c2| {
-                            !COMPANY_FIXED_DETAILS[&c2.0].private
-                                && (self.company_details[&c2.0].shares_remaining > 0 || 
+                        .filter(|possible_public| {
+                            !COMPANY_FIXED_DETAILS[&possible_public.0].private
+                                && (self.company_details[&possible_public.0].shares_remaining > 0 || 
                                 //TODO: Make the EBRC here data somewhere
-                                *c2.0 == Company::EBRC)
+                                *possible_public.0 == Company::EBRC)
                         })
-                        .map(|c2| (c.clone(), c2.0.clone()))
+                        .map(|public_co| (c.clone(), public_co.0.clone()))
                         .collect::<Vec<(Company, Company)>>()
                 } else {
                     COMPANY_FIXED_DETAILS
                         .iter()
-                        .filter(|c2| {
-                            COMPANY_FIXED_DETAILS[&c2.0].private
-                                && !self.company_details[&c2.0].merged.unwrap_or(false)
+                        .filter(|possible_private| {
+                            COMPANY_FIXED_DETAILS[&possible_private.0].private
+                                && !self.company_details[&possible_private.0].merged.unwrap_or(false)
                         })
-                        .map(|c2| (c.clone(), c2.0.clone()))
+                        .map(|private_co| (private_co.0.clone(), c.clone()))
                         .collect()
                 }
             })
@@ -979,7 +1022,7 @@ impl EBRState {
             .filter(
                 // Check if actually connected
                 // Left to last because slowest
-                |(private_co, public_co)| self.connected_to(public_co.clone(), private_co.clone()),
+                |(private_co, public_co)| self.connected_to(private_co.clone(), public_co.clone()),
             )
             .collect()
     }
@@ -1410,6 +1453,11 @@ impl State for EBRState {
                 .iter()
                 .map(|bond| EBRAction::IssueBond(*company, *bond))
                 .collect(),
+            Stage::ChooseMerge => self
+                .merge_options(next_actor)
+                .iter()
+                .map(|(private, company)| EBRAction::Merge(*private, *company))
+                .collect(),
             _ => {
                 warn!("Unimplemented Stage in PermittedActions");
                 vec![]
@@ -1548,7 +1596,7 @@ fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
             (x + 1, y + 1),
             (x, y + 1),
             (x - 1, y + 1),
-            (x - 1, y ),
+            (x - 1, y),
         ]
     }
 }
