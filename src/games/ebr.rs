@@ -1,4 +1,3 @@
-use linked_hash_set::LinkedHashSet;
 use log::warn;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -1071,9 +1070,6 @@ impl EBRState {
                         .iter()
                         .filter(|possible_public| {
                             !COMPANY_FIXED_DETAILS[&possible_public.0].private
-                                && (self.company_details[&possible_public.0].shares_remaining > 0 || 
-                                //TODO: Make the EBRC here data somewhere
-                                *possible_public.0 == Company::EBRC)
                         })
                         .map(|public_co| (c.clone(), public_co.0.clone()))
                         .collect::<Vec<(Company, Company)>>()
@@ -1090,6 +1086,10 @@ impl EBRState {
             })
             .collect::<BTreeSet<(Company, Company)>>()
             .iter()
+            .filter(|(_private_co, public_co)|  
+                                (self.company_details[public_co].shares_remaining > 0 || 
+                                //TODO: Make the EBRC here data somewhere
+                                *public_co == Company::EBRC))
             .map(|c| c.clone())
             .filter(
                 // Check if actually connected
@@ -1156,6 +1156,7 @@ impl EBRState {
             .flatten()
             .collect::<HashSet<Coordinate>>() // Unique
             .iter()
+            .filter(|t| t.0 < WIDTH && t.1 < HEIGHT)
             .filter_map(|t| {
                 if t.0 >= WIDTH || t.1 >= HEIGHT {
                     return None;
@@ -1250,10 +1251,11 @@ impl EBRState {
             .iter()
             .map(|t| get_neighbors(*t))
             .flatten()
+            .filter(|t| t.0 < WIDTH && t.1 < HEIGHT)
             .filter(|t| {
                 !(self.narrow_cost(*t) as isize > cash
                     && !self.track.iter().any(|t2| t2.location == *t))
-                    && TERRAIN_ATTRIBUTES[&TERRAIN[t.1][t.0]].buildable
+                    && TERRAIN[t.1][t.0].attributes().buildable
             })
             .collect::<BTreeSet<_>>()
             .iter()
@@ -1506,7 +1508,7 @@ impl State for EBRState {
                 if !self.can_build_any() {
                     addable_action_cubes.remove(&ChoosableAction::BuildTrack);
                 }
-                if !can_take_any {
+                if !self.can_take_any() {
                     addable_action_cubes.remove(&ChoosableAction::TakeResources);
                 }
                 if !self.can_issue_any() {
