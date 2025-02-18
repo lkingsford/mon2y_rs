@@ -251,6 +251,7 @@ struct CompanyDetails {
     hq: Option<Coordinate>,
     track_remaining: usize,
     bonds: Vec<BondDetails>,
+    owned_privates: Vec<Company>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Hash)]
@@ -355,7 +356,7 @@ const R: Terrain = Terrain::Port;
 const HEIGHT: usize = 13;
 const WIDTH: usize = 14;
 
-const TERRAIN: [[Terrain; 14]; 13] = [
+const TERRAIN: [[Terrain; WIDTH]; HEIGHT] = [
     /* */ [N, N, N, N, N, N, N, N, N, N, N, N, N, N],
     /*  */ [N, P, F, P, P, N, N, N, N, N, N, N, P, N],
     /* */ [N, F, F, F, P, R, T, N, P, N, F, F, F, M],
@@ -521,6 +522,10 @@ const INITIAL_TRACK: [Track; 4] = [
 const NARROW_GAUGE_INITIAL: usize = 12;
 const MAX_BUILDS: u8 = 3;
 const NARROW_TRACK_COST: usize = 2;
+const TAKE_RESOURCE_COST: usize = 3;
+const TAKE_DIVIDEND: usize = 1;
+const TAKE_TOWN_DELIVER_DIVIDEND: usize = 1;
+const TAKE_PORT_DELIVER_DIVIDEND: usize = 1;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum EBRAction {
@@ -536,6 +541,9 @@ pub enum EBRAction {
     ChooseBondCompany(Company),
     IssueBond(Company, Bond),
     Merge(Company, Company),
+    ChooseTakeResourcesCompany(Company, Option<Company>),
+    TakeResources(Coordinate),
+    PassTakeResources,
 }
 
 impl Action for EBRAction {
@@ -693,6 +701,9 @@ impl Action for EBRAction {
                     ChoosableAction::BuildTrack => state.stage = Stage::ChooseBuildCompany,
                     ChoosableAction::IssueBond => state.stage = Stage::ChooseBondCompany,
                     ChoosableAction::Merge => state.stage = Stage::ChooseMerge,
+                    ChoosableAction::TakeResources => {
+                        state.stage = Stage::ChooseTakeResourcesCompany
+                    }
                     _ => {} //warn!("Not implemented yet"),
                 }
                 state
@@ -714,7 +725,6 @@ impl Action for EBRAction {
             }
             EBRAction::StartPrivateAt(company, location) => {
                 let mut state = state.clone();
-                // TODO: Add resource cubes around
                 state.company_details.get_mut(company).unwrap().hq = Some(*location);
                 state.stage = Stage::Auction {
                     initial_auction: false,
@@ -833,6 +843,7 @@ impl Action for EBRAction {
                         company_details.shares_held += 1;
                         company_details.shares_remaining -= 1;
                     }
+                    company_details.owned_privates.push(private.clone());
                 }
                 state.holdings = state
                     .holdings
@@ -853,6 +864,65 @@ impl Action for EBRAction {
                         )
                     })
                     .collect();
+                state.stage = Stage::ChooseAction;
+                state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
+                state
+            }
+            EBRAction::ChooseTakeResourcesCompany(company, delivery_company) => {
+                let mut state = state.clone();
+                state.stage = Stage::TakeResources {
+                    company: *company,
+                    delivery_company: *company,
+                    taken_resources: 0,
+                };
+                state
+            }
+            EBRAction::TakeResources(coordinate) => {
+                let mut state = state.clone();
+                if let Stage::TakeResources {
+                    company,
+                    delivery_company,
+                    taken_resources,
+                } = state.stage
+                {
+                    state.resource_cubes.retain(|c| c != coordinate);
+
+                    {
+                        let mut new_cash = state.player_cash.clone();
+                        state.holdings.iter().for_each(|(&player, companies)| {
+                            {
+                                companies.iter().for_each(|c| {
+                                    if *c == company {
+                                        *new_cash.get_mut(&player).unwrap() +=
+                                            TAKE_DIVIDEND as isize;
+                                    }
+
+                                    if *c == delivery_company {
+                                        if state.has_port(delivery_company) {
+                                            *new_cash.get_mut(&player).unwrap() +=
+                                                TAKE_PORT_DELIVER_DIVIDEND as isize;
+                                        } else if state.has_town(delivery_company) {
+                                            *new_cash.get_mut(&player).unwrap() +=
+                                                TAKE_TOWN_DELIVER_DIVIDEND as isize;
+                                        }
+                                    }
+                                })
+                            }
+                        });
+
+                        state.player_cash = new_cash;
+                    };
+
+                    state.stage = Stage::TakeResources {
+                        company,
+                        delivery_company,
+                        taken_resources: taken_resources + 1,
+                    }
+                }
+                state
+            }
+            EBRAction::PassTakeResources => {
+                let mut state = state.clone();
                 state.stage = Stage::ChooseAction;
                 state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
                 state
@@ -891,8 +961,10 @@ enum Stage {
     ChooseAction,
     TakeResources {
         company: Company,
+        delivery_company: Company,
         taken_resources: u8,
     },
+    ChooseTakeResourcesCompany,
     ChooseAuctionCompany,
     ChoosePrivateStart(Company),
     ChooseBuildCompany,
@@ -1038,6 +1110,28 @@ impl EBRState {
                     .iter()
                     .any(|ot| ot.location == neighbor && ot.track_type == public_co_track)
             })
+    }
+
+    fn connected_majors(&self, private_co: Company) -> Vec<Company> {
+        COMPANY_FIXED_DETAILS
+            .iter()
+            .filter(|c| !c.1.private)
+            .filter(|public_c| self.connected_to(private_co, public_c.0.clone()))
+            .map(|c| c.0.clone())
+            .collect()
+    }
+
+    fn has_port(&self, company: Company) -> bool {
+        self.track.iter().any(|t| {
+            t.track_type == TrackType::CompanyOwned(company)
+                && TERRAIN[t.location.1][t.location.0] == Terrain::Port
+        })
+    }
+    fn has_town(&self, company: Company) -> bool {
+        self.track.iter().any(|t| {
+            t.track_type == TrackType::CompanyOwned(company)
+                && TERRAIN[t.location.1][t.location.0] == Terrain::Town
+        })
     }
 
     fn can_build_any(&self) -> bool {
@@ -1191,6 +1285,48 @@ impl EBRState {
             }
             self.possible_narrow_track(company).len() > 0
         }
+    }
+
+    fn can_take_any(&self) -> bool {
+        let Actor::Player(next_actor) = self.next_actor else {
+            unreachable!()
+        };
+        self.holdings[&next_actor]
+            .iter()
+            .collect::<HashSet<_>>()
+            .iter()
+            .any(|p| self.can_take(**p))
+    }
+
+    fn can_take(&self, company: Company) -> bool {
+        (self.company_details[&company].cash > TAKE_RESOURCE_COST as isize)
+            && self.company_accessible_resources(company).len() > 0
+    }
+
+    fn company_accessible_resources(&self, company: Company) -> Vec<Coordinate> {
+        // Major: Anything in space of track or narrow connected to owned minor
+        // Minor: Anything connected to narrow
+        let company_details = self.company_details.get(&company).unwrap();
+        let accessible_spaces = if COMPANY_FIXED_DETAILS[&company].private {
+            let mut spaces = self.possible_owned_track(company.clone());
+            spaces.extend(
+                company_details
+                    .owned_privates
+                    .iter()
+                    .flat_map(|p| self.reachable_narrow_track(p.clone()))
+                    .collect::<Vec<Coordinate>>(),
+            );
+            spaces
+        } else {
+            self.possible_narrow_track(company)
+        };
+        let accessible_spaces = accessible_spaces.iter().collect::<HashSet<_>>();
+
+        self.resource_cubes
+            .iter()
+            .filter(|r| accessible_spaces.contains(r))
+            .map(|coord| *coord)
+            .collect()
     }
 
     fn net_revenue(&self, company: Company) -> isize {
@@ -1458,6 +1594,45 @@ impl State for EBRState {
                 .iter()
                 .map(|(private, company)| EBRAction::Merge(*private, *company))
                 .collect(),
+            Stage::ChooseTakeResourcesCompany => COMPANY_FIXED_DETAILS
+                .iter()
+                .filter(|c| self.can_take(c.0.clone()))
+                .flat_map(|c| {
+                    let delivery_majors = self
+                        .company_details
+                        .iter()
+                        .filter(|(major, _)| self.has_port(**major) || self.has_town(**major))
+                        .collect::<Vec<_>>();
+                    if delivery_majors.len() > 0 {
+                        delivery_majors
+                            .iter()
+                            .map(|major| {
+                                EBRAction::ChooseTakeResourcesCompany(
+                                    c.0.clone(),
+                                    Some(major.0.clone()),
+                                )
+                            })
+                            .collect::<Vec<EBRAction>>()
+                    } else {
+                        vec![EBRAction::ChooseTakeResourcesCompany(c.0.clone(), None)]
+                    }
+                })
+                .collect(),
+            Stage::TakeResources {
+                company,
+                delivery_company,
+                taken_resources,
+            } => {
+                let mut actions = self
+                    .company_accessible_resources(*company)
+                    .iter()
+                    .map(|coord| EBRAction::TakeResources(*coord))
+                    .collect::<Vec<EBRAction>>();
+                if *taken_resources > 0 {
+                    actions.push(EBRAction::PassTakeResources)
+                };
+                actions
+            }
             _ => {
                 warn!("Unimplemented Stage in PermittedActions");
                 vec![]
@@ -1540,6 +1715,7 @@ impl Game for EBR {
                                 },
                                 deferred: true,
                             }],
+                            owned_privates: vec![],
                         },
                     )
                 })
