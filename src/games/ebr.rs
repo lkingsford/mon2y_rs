@@ -732,6 +732,13 @@ impl Action for EBRAction {
                     winning_bidder: None,
                     passed: HashSet::new(),
                 };
+                if !state.track.iter().any(|t| t.location == *location && t.track_type == TrackType::Narrow) {
+                state.track.push(Track {
+                    location: *location,
+                    track_type: TrackType::Narrow,
+                });
+                    
+                }
                 // Place resource cubes around
                 let mut potential_locations = get_neighbors(location.clone());
                 potential_locations.push(*location);
@@ -1078,7 +1085,9 @@ impl EBRState {
                         .iter()
                         .filter(|possible_private| {
                             COMPANY_FIXED_DETAILS[&possible_private.0].private
-                                && !self.company_details[&possible_private.0].merged.unwrap_or(false)
+                                && !self.company_details[&possible_private.0]
+                                    .merged
+                                    .unwrap_or(false)
                         })
                         .map(|private_co| (private_co.0.clone(), c.clone()))
                         .collect()
@@ -1086,10 +1095,11 @@ impl EBRState {
             })
             .collect::<BTreeSet<(Company, Company)>>()
             .iter()
-            .filter(|(_private_co, public_co)|  
-                                (self.company_details[public_co].shares_remaining > 0 || 
+            .filter(|(_private_co, public_co)| {
+                (self.company_details[public_co].shares_remaining > 0 || 
                                 //TODO: Make the EBRC here data somewhere
-                                *public_co == Company::EBRC))
+                                *public_co == Company::EBRC)
+            })
             .map(|c| c.clone())
             .filter(
                 // Check if actually connected
@@ -1417,6 +1427,7 @@ impl EBRState {
 
         self.terminal = self.dividends_paid == 6
             // TODO: Add bankruptcy
+            || self.player_cash.iter().any(|(_, cash)| *cash < 0)
             ||
             // Two of these conditions must be met
              vec![
