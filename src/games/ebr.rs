@@ -796,7 +796,10 @@ impl Action for EBRAction {
                         }
                     }
 
-                    if completed_builds < MAX_BUILDS {
+                let Actor::Player(next_actor) = state.next_actor else {
+                    unreachable!()
+                };
+                    if completed_builds < MAX_BUILDS  && state.can_build(company,next_actor ) {
                         state.stage = Stage::BuildTrack {
                             company,
                             completed_builds: completed_builds + 1,
