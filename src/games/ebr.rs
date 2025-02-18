@@ -789,6 +789,7 @@ impl Action for EBRAction {
                             track_type: TrackType::Narrow,
                         });
                         let cost = state.narrow_cost(*location) as isize;
+                        state.narrow_gauge_remaining -= 1;
                         if let Some(company_details) = state.company_details.get_mut(&company) {
                             company_details.cash -= cost;
                         }
@@ -1511,8 +1512,6 @@ impl State for EBRState {
                     .filter(|(_, &cube)| !cube)
                     .map(|(i, _)| ACTION_CUBE_SPACES[i])
                     .collect::<BTreeSet<ChoosableAction>>();
-                // placeholders
-                let can_take_any = true;
                 if !self.can_merge_any() {
                     addable_action_cubes.remove(&ChoosableAction::Merge);
                 };
