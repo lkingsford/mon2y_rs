@@ -782,6 +782,7 @@ impl Action for EBRAction {
                         let cost = state.owned_cost(*location, None) as isize;
                         if let Some(company_details) = state.company_details.get_mut(&company) {
                             company_details.cash -= cost;
+                            company_details.track_remaining -= 1;
                         }
                     } else {
                         state.track.push(Track {
