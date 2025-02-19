@@ -208,26 +208,33 @@ where
 
     pub fn iterate(&self) -> Selection<ActionType> {
         let selection = self.selection();
-        if let Selection::FullyExplored = selection {
-            log::warn!("Iterate short circuited - fully explored");
-            return Selection::FullyExplored;
-        };
-        let expanded_nodes = self.expansion(&selection);
-        if let Selection::Selection(..) = selection {
-            let reward = {
-                self.play_out(
-                    expanded_nodes
-                        .last()
-                        .unwrap()
-                        .read()
-                        .unwrap()
-                        .state()
-                        .clone(),
-                )
-            };
-            self.propagate_reward(expanded_nodes, reward);
+        // not sure if I actually improved anything here.
+        // using if-lets to shortcicuit is a pattern I often use
+        // but I nocited in this function specifically that there are only two
+        // possible cases, so I used a match instead.
+        match selection {
+            Selection::FullyExplored => {
+                log::warn!("Iterate short circuited - fully explored");
+                return Selection::FullyExplored;
+            }
+            Selection::Selection(..) => {
+                let expanded_nodes = self.expansion(&selection);
+                let reward = {
+                    self.play_out(
+                        expanded_nodes
+                            .last()
+                            .unwrap()
+                            .read()
+                            .unwrap()
+                            .state()
+                            .clone(),
+                    )
+                };
+                self.propagate_reward(expanded_nodes, reward);
+
+                selection
+            }
         }
-        selection
     }
 }
 
