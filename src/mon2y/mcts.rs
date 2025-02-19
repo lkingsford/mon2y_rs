@@ -2,6 +2,7 @@ use std::sync::atomic::{self, AtomicUsize};
 
 use log::trace;
 
+use crate::mon2y::annotation::Annotation;
 use crate::mon2y::game::Actor;
 use crate::mon2y::tree::Selection;
 
@@ -43,13 +44,17 @@ where
     std::thread::scope(|scope| {
         for _ in 0..thread_count {
             scope.spawn(|| loop {
+                let mut annotations: Vec<Annotation> = vec![];
                 {
                     let time_started = std::time::Instant::now();
                     trace!(
                         "Starting iteration {}",
                         finished_iterations.load(atomic::Ordering::SeqCst)
                     );
-                    let result = tree.iterate();
+                    let (result, annotation) = tree.iterate();
+                    if let Some(annotation) = annotation {
+                        annotations.push(annotation)
+                    };
                     let current_iterations =
                         finished_iterations.fetch_add(1, atomic::Ordering::SeqCst);
                     trace!("Finished iteration {}", current_iterations);

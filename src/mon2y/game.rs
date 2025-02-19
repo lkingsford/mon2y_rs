@@ -1,5 +1,8 @@
-use super::Reward;
-use std::fmt::Debug;
+use super::{
+    annotation::{Annotation, AnnotationElement},
+    Reward,
+};
+use std::{collections::HashMap, fmt::Debug};
 
 pub trait Action: Debug + Clone + Eq + std::hash::Hash {
     type StateType: State<ActionType = Self>;
@@ -30,4 +33,7 @@ pub trait State: Clone {
     fn next_actor(&self) -> Actor<Self::ActionType>;
     fn terminal(&self) -> bool;
     fn reward(&self) -> Vec<Reward>;
+    fn annotation(&self) -> Annotation {
+        HashMap::<String, AnnotationElement>::new()
+    }
 }

@@ -1,3 +1,4 @@
+use super::annotation::Annotation;
 use super::game::{Action, Actor, State};
 use super::node::{Node, SNode};
 use super::weighted_random::weighted_random;
@@ -151,7 +152,7 @@ where
         result
     }
 
-    pub fn play_out(&self, state: StateType) -> Vec<Reward> {
+    pub fn play_out(&self, state: StateType) -> (Vec<Reward>, Annotation) {
         let mut rng = rand::thread_rng();
 
         let mut cur_state = Box::new(state.clone());
@@ -172,7 +173,7 @@ where
             }
         }
         trace!("Reward is {:?}", cur_state.reward());
-        cur_state.reward()
+        (cur_state.reward(), cur_state.annotation())
     }
 
     pub fn propagate_reward(&self, nodes: Vec<SNode<StateType, ActionType>>, reward: Vec<Reward>) {
@@ -198,20 +199,16 @@ where
         }
     }
 
-    pub fn iterate(&self) -> Selection<ActionType> {
+    pub fn iterate(&self) -> (Selection<ActionType>, Option<Annotation>) {
         let selection = self.selection();
-        // not sure if I actually improved anything here.
-        // using if-lets to shortcicuit is a pattern I often use
-        // but I nocited in this function specifically that there are only two
-        // possible cases, so I used a match instead.
         match selection {
             Selection::FullyExplored => {
                 log::warn!("Iterate short circuited - fully explored");
-                return Selection::FullyExplored;
+                return (Selection::FullyExplored, None);
             }
             Selection::Selection(..) => {
                 let expanded_nodes = self.expansion(&selection);
-                let reward = {
+                let (reward, annotation) = {
                     self.play_out(
                         expanded_nodes
                             .last()
@@ -224,7 +221,7 @@ where
                 };
                 self.propagate_reward(expanded_nodes, reward);
 
-                selection
+                (selection, annotation)
             }
         }
     }
@@ -385,7 +382,7 @@ mod tests {
         let explored_state = InjectableGameAction::WinInXTurns(2).execute(&root_state);
         let root = create_expanded_node(root_state, None);
         let tree = Tree::new(root);
-        let reward = tree.play_out(explored_state);
+        let (reward, _) = tree.play_out(explored_state);
 
         assert_eq!(reward, vec![1.0]);
     }
@@ -577,7 +574,7 @@ mod tests {
         let mut weight_1_visits = 0;
         let mut weight_2_visits = 0;
         for _ in 0..1000 {
-            let reward = tree.play_out(root_state.clone());
+            let (reward, _) = tree.play_out(root_state.clone());
             if reward[0] < 0.0 {
                 weight_1_visits += 1
             } else {
