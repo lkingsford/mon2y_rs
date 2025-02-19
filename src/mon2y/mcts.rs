@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{self, AtomicUsize};
 use std::sync::Arc;
 
 use log::trace;
@@ -38,38 +38,32 @@ where
         }
     }
 
-    let tree = Arc::new(Tree::new_with_constant(root_node, exploration_constant));
-    let mut threads = vec![];
+    let tree = Tree::new_with_constant(root_node, exploration_constant);
+    let finished_iterations = AtomicUsize::new(0);
 
-    let finished_iterations: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
-
-    for _ in 0..thread_count {
-        let tree_clone = Arc::clone(&tree);
-        let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
-        let time_started = std::time::Instant::now();
-        threads.push(std::thread::spawn(move || loop {
-            {
-                trace!(
-                    "Starting iteration {}",
-                    finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
-                );
-                let result = tree_clone.iterate();
-                let current_iterations =
-                    finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                trace!("Finished iteration {}", current_iterations);
-                if current_iterations >= iterations
-                    || result == Selection::FullyExplored
-                    || time_started.elapsed() > time_limit.unwrap_or(std::time::Duration::MAX)
+    std::thread::scope(|scope| {
+        for _ in 0..thread_count {
+            scope.spawn(|| loop {
                 {
-                    break;
+                    let time_started = std::time::Instant::now();
+                    trace!(
+                        "Starting iteration {}",
+                        finished_iterations.load(atomic::Ordering::SeqCst)
+                    );
+                    let result = tree.iterate();
+                    let current_iterations =
+                        finished_iterations.fetch_add(1, atomic::Ordering::SeqCst);
+                    trace!("Finished iteration {}", current_iterations);
+                    if current_iterations >= iterations
+                        || result == Selection::FullyExplored
+                        || time_started.elapsed() > time_limit.unwrap_or(std::time::Duration::MAX)
+                    {
+                        break;
+                    }
                 }
-            }
-        }));
-    }
-
-    for thread in threads {
-        thread.join().unwrap();
-    }
+            });
+        }
+    });
 
     log::debug!(
         "Completed {} iterations",
