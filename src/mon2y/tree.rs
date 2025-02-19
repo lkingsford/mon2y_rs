@@ -221,7 +221,7 @@ where
                 };
                 self.propagate_reward(expanded_nodes, reward);
 
-                (selection, annotation)
+                (selection, Some(annotation))
             }
         }
     }

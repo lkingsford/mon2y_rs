@@ -1,6 +1,7 @@
 pub mod game;
 mod mcts;
 pub use mcts::calculate_best_turn;
+pub mod annotation;
 pub mod node;
 pub mod tree;
 pub mod weighted_random;
