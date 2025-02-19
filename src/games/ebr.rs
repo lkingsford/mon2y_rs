@@ -732,12 +732,15 @@ impl Action for EBRAction {
                     winning_bidder: None,
                     passed: HashSet::new(),
                 };
-                if !state.track.iter().any(|t| t.location == *location && t.track_type == TrackType::Narrow) {
-                state.track.push(Track {
-                    location: *location,
-                    track_type: TrackType::Narrow,
-                });
-                    
+                if !state
+                    .track
+                    .iter()
+                    .any(|t| t.location == *location && t.track_type == TrackType::Narrow)
+                {
+                    state.track.push(Track {
+                        location: *location,
+                        track_type: TrackType::Narrow,
+                    });
                 }
                 // Place resource cubes around
                 let mut potential_locations = get_neighbors(location.clone());
@@ -796,10 +799,10 @@ impl Action for EBRAction {
                         }
                     }
 
-                let Actor::Player(next_actor) = state.next_actor else {
-                    unreachable!()
-                };
-                    if completed_builds < MAX_BUILDS  && state.can_build(company,next_actor ) {
+                    let Actor::Player(next_actor) = state.next_actor else {
+                        unreachable!()
+                    };
+                    if completed_builds < MAX_BUILDS && state.can_build(company, next_actor) {
                         state.stage = Stage::BuildTrack {
                             company,
                             completed_builds: completed_builds + 1,
@@ -1573,7 +1576,9 @@ impl State for EBRState {
                 completed_builds,
             } => {
                 if COMPANY_FIXED_DETAILS[company].private {
-                    if self.narrow_gauge_remaining == 0 { return vec![EBRAction::BuildPass] };
+                    if self.narrow_gauge_remaining == 0 {
+                        return vec![EBRAction::BuildPass];
+                    };
                     let mut actions = self
                         .possible_narrow_track(*company)
                         .iter()
@@ -1584,7 +1589,9 @@ impl State for EBRState {
                     };
                     actions
                 } else {
-                    if self.company_details[company].track_remaining == 0 { return vec![EBRAction::BuildPass] };
+                    if self.company_details[company].track_remaining == 0 {
+                        return vec![EBRAction::BuildPass];
+                    };
                     let mut actions = self
                         .possible_owned_track(*company)
                         .iter()
