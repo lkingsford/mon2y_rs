@@ -18,8 +18,7 @@ pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
     pub constant: f64,
 }
 
-impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = StateType>>
-    Tree<StateType, ActionType>
+impl<StateType, ActionType> Tree<StateType, ActionType>
 where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
