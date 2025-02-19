@@ -75,11 +75,11 @@ impl Action for CSAction {
             CSAction::DiceRoll(d1, d2, d3, d4) => {
                 let mut new_state = state.clone();
                 new_state.last_roll = Some((*d1, *d2, *d3, *d4));
-                if new_state.permitted_actions().len() == 0 {
+                if new_state.permitted_actions().is_empty() {
                     // Bust
                     new_state.next_player = (state.next_player + 1) % new_state.player_count;
                     new_state.locked_in_columns.clear();
-                    new_state.temp_position = TEMPORARY_INIT.clone();
+                    new_state.temp_position = *TEMPORARY_INIT;
                     new_state.next_actor = Actor::GameAction(DICE_ACTIONS.to_vec());
                 } else {
                     new_state.next_actor = Actor::Player(new_state.next_player);
@@ -127,7 +127,7 @@ impl Action for CSAction {
                 }
                 new_state.next_player = (state.next_player + 1) % new_state.player_count;
                 new_state.locked_in_columns.clear();
-                new_state.temp_position = TEMPORARY_INIT.clone();
+                new_state.temp_position = *TEMPORARY_INIT;
                 new_state.next_actor = Actor::GameAction(DICE_ACTIONS.clone());
                 new_state
             }
@@ -177,21 +177,19 @@ impl State for CSState {
 
         let new_column_allowed = self.locked_in_columns.len() < 3;
         let two_new_columns_allowed = self.locked_in_columns.len() < 2;
-        let column_allowed = HashMap::from(
-            (2..=12)
+        let column_allowed = (2..=12)
                 .map(|col| {
                     (
                         col,
                         // It's my vanity project, and even I think this might be a little much
                         (new_column_allowed || self.locked_in_columns.contains(&col))
-                            && self.claimed_columns.get(&col) == None
+                            && self.claimed_columns.get(&col).is_none()
                             && (self.temp_position[col as usize - 2].is_none()
                                 || self.temp_position[col as usize - 2]
                                     < COLUMNS.get(&col).copied()),
                     )
                 })
-                .collect::<HashMap<_, _>>(),
-        );
+                .collect::<HashMap<_, _>>();
 
         // This could be done more programmatically (with less repetition), but the action space is small enough
         // that I'm not worried
@@ -250,7 +248,7 @@ impl State for CSState {
             one_match_actions.push(CSAction::Move(d23, None));
         }
 
-        if possible_actions.len() == 0 {
+        if possible_actions.is_empty() {
             // Only do the 'single actions' if there's no double actions
             possible_actions.extend(one_match_actions.iter());
         }
@@ -259,7 +257,7 @@ impl State for CSState {
         let unique_actions: LinkedHashSet<CSAction> =
             LinkedHashSet::from_iter(possible_actions.iter().cloned());
 
-        unique_actions.iter().map(|a| *a).collect()
+        unique_actions.iter().copied().collect()
     }
 
     fn reward(&self) -> Vec<f64> {
@@ -302,7 +300,7 @@ impl Game for CS {
             positions,
             claimed_columns: HashMap::new(),
             locked_in_columns: HashSet::new(),
-            temp_position: TEMPORARY_INIT.clone(),
+            temp_position: *TEMPORARY_INIT,
             last_roll: None,
             next_actor: Actor::GameAction(DICE_ACTIONS.clone()),
             next_player: 0,
@@ -346,12 +344,10 @@ mod tests {
             (CSAction::DiceRoll(1, 3, 4, 6), 24),
         ];
 
-        let actions: HashMap<CSAction, u32> = HashMap::from(
-            DICE_ACTIONS
+        let actions: HashMap<CSAction, u32> = DICE_ACTIONS
                 .iter()
                 .map(|(action, weight)| (*action, *weight))
-                .collect::<HashMap<_, _>>(),
-        );
+                .collect::<HashMap<_, _>>();
 
         for (action, expected_weight) in test_cases {
             let actual_weight = actions.get(&action).unwrap_or(&0);

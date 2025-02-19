@@ -601,7 +601,7 @@ impl Action for EBRAction {
                             let Actor::Player(mut next_actor) = state.next_actor else {
                                 unreachable!()
                             };
-                            passed.insert(next_actor as u8);
+                            passed.insert(next_actor);
                             while passed.contains(&next_actor) {
                                 next_actor = (&next_actor + 1) % state.player_count;
                             }
@@ -611,7 +611,7 @@ impl Action for EBRAction {
                                 lot,
                                 current_bid,
                                 winning_bidder,
-                                passed: passed,
+                                passed,
                             };
                             return state;
                         };
@@ -620,9 +620,9 @@ impl Action for EBRAction {
                             .holdings
                             .get_mut(&winning_bidder.unwrap())
                             .unwrap()
-                            .push(lot.clone());
+                            .push(lot);
                         *state.player_cash.get_mut(&winning_bidder.unwrap()).unwrap() -=
-                            current_bid.unwrap_or(0) as isize;
+                            current_bid.unwrap_or(0);
                         {
                             let company_details = state.company_details.get_mut(&lot).unwrap();
                             company_details.shares_held += 1;
@@ -709,7 +709,7 @@ impl Action for EBRAction {
             }
             EBRAction::ChooseAuctionCompany(company) => {
                 let mut state = state.clone();
-                if !COMPANY_FIXED_DETAILS[&company].private {
+                if !COMPANY_FIXED_DETAILS[company].private {
                     state.stage = Stage::Auction {
                         initial_auction: false,
                         current_bid: None,
@@ -743,7 +743,7 @@ impl Action for EBRAction {
                     });
                 }
                 // Place resource cubes around
-                let mut potential_locations = get_neighbors(location.clone());
+                let mut potential_locations = get_neighbors(*location);
                 potential_locations.push(*location);
                 for location in potential_locations {
                     if location.0 >= WIDTH || location.1 >= HEIGHT {
@@ -780,7 +780,7 @@ impl Action for EBRAction {
                     if !COMPANY_FIXED_DETAILS[&company].private {
                         state.track.push(Track {
                             location: *location,
-                            track_type: TrackType::CompanyOwned(company.clone()),
+                            track_type: TrackType::CompanyOwned(company),
                         });
                         let cost = state.owned_cost(*location, None) as isize;
                         if let Some(company_details) = state.company_details.get_mut(&company) {
@@ -825,12 +825,12 @@ impl Action for EBRAction {
             }
             EBRAction::ChooseBondCompany(company) => {
                 let mut state = state.clone();
-                state.stage = Stage::ChooseBond(company.clone());
+                state.stage = Stage::ChooseBond(*company);
                 state
             }
             EBRAction::IssueBond(company, bond) => {
                 let mut state = state.clone();
-                let details = state.company_details.get_mut(&company).unwrap();
+                let details = state.company_details.get_mut(company).unwrap();
                 details.cash += bond.face_value as isize;
                 details.bonds.push(BondDetails {
                     bond: *bond,
@@ -845,11 +845,11 @@ impl Action for EBRAction {
                 let mut state = state.clone();
                 {
                     let (private_cash, private_bonds) = {
-                        let private_details = state.company_details.get_mut(&private).unwrap();
+                        let private_details = state.company_details.get_mut(private).unwrap();
                         private_details.merged = Some(true);
                         (private_details.cash, private_details.bonds.clone())
                     };
-                    let company_details = state.company_details.get_mut(&company).unwrap();
+                    let company_details = state.company_details.get_mut(company).unwrap();
                     company_details.cash += private_cash;
                     company_details.bonds.extend(private_bonds.clone());
                     // TODO: Data drive the EBRC exception
@@ -857,7 +857,7 @@ impl Action for EBRAction {
                         company_details.shares_held += 1;
                         company_details.shares_remaining -= 1;
                     }
-                    company_details.owned_privates.push(private.clone());
+                    company_details.owned_privates.push(*private);
                 }
                 state.holdings = state
                     .holdings
@@ -869,9 +869,9 @@ impl Action for EBRAction {
                                 .iter()
                                 .map(|c| {
                                     if c != private {
-                                        c.clone()
+                                        *c
                                     } else {
-                                        company.clone()
+                                        *company
                                     }
                                 })
                                 .collect(),
@@ -1008,9 +1008,9 @@ pub struct EBRState {
 
 impl EBRState {
     fn min_bid(&self, company: Company) -> isize {
-        let rev = self.net_revenue(company.clone());
+        let rev = self.net_revenue(company);
         let owned_shares = self.company_details[&company].shares_held;
-        return max(1, div_ceil(rev, owned_shares as isize + 1));
+        max(1, div_ceil(rev, owned_shares as isize + 1))
     }
 
     fn can_auction_any(&self) -> bool {
@@ -1018,14 +1018,14 @@ impl EBRState {
             unreachable!()
         };
         let cash = self.player_cash[&next_actor];
-        if &cash < &1 {
+        if cash < 1 {
             return false;
         };
         // Check for min bid of at least one company with shares available
         // (including the minors)
         COMPANY_FIXED_DETAILS
             .iter()
-            .any(|c| self.can_auction(c.0.clone(), cash))
+            .any(|c| self.can_auction(*c.0, cash))
     }
 
     fn can_auction(&self, company: Company, cash: isize) -> bool {
@@ -1046,7 +1046,7 @@ impl EBRState {
         }
         COMPANY_FIXED_DETAILS
             .iter()
-            .any(|c| self.can_issue(c.0.clone()))
+            .any(|c| self.can_issue(*c.0))
     }
     fn can_issue(&self, company: Company) -> bool {
         if COMPANY_FIXED_DETAILS[&company].private {
@@ -1065,39 +1065,38 @@ impl EBRState {
             unreachable!()
         };
 
-        self.merge_options(next_actor).len() > 0
+        !self.merge_options(next_actor).is_empty()
     }
 
     fn merge_options(&self, player: PlayerID) -> BTreeSet<(Company, Company)> {
         self.holdings[&player]
-            .iter()
-            .map(|c| c.clone())
+            .iter().copied()
             .collect::<BTreeSet<Company>>()
             .iter()
             .filter(|c| {
-                !COMPANY_FIXED_DETAILS[&c].private
-                    || (COMPANY_FIXED_DETAILS[&c].private
-                        && !self.company_details[&c].merged.unwrap_or(false))
+                !COMPANY_FIXED_DETAILS[c].private
+                    || (COMPANY_FIXED_DETAILS[c].private
+                        && !self.company_details[c].merged.unwrap_or(false))
             })
             .flat_map(|c| {
-                if COMPANY_FIXED_DETAILS[&c].private {
+                if COMPANY_FIXED_DETAILS[c].private {
                     COMPANY_FIXED_DETAILS
                         .iter()
                         .filter(|possible_public| {
-                            !COMPANY_FIXED_DETAILS[&possible_public.0].private
+                            !COMPANY_FIXED_DETAILS[possible_public.0].private
                         })
-                        .map(|public_co| (c.clone(), public_co.0.clone()))
+                        .map(|public_co| (*c, *public_co.0))
                         .collect::<Vec<(Company, Company)>>()
                 } else {
                     COMPANY_FIXED_DETAILS
                         .iter()
                         .filter(|possible_private| {
-                            COMPANY_FIXED_DETAILS[&possible_private.0].private
-                                && !self.company_details[&possible_private.0]
+                            COMPANY_FIXED_DETAILS[possible_private.0].private
+                                && !self.company_details[possible_private.0]
                                     .merged
                                     .unwrap_or(false)
                         })
-                        .map(|private_co| (private_co.0.clone(), c.clone()))
+                        .map(|private_co| (*private_co.0, *c))
                         .collect()
                 }
             })
@@ -1107,12 +1106,11 @@ impl EBRState {
                 self.company_details[public_co].shares_remaining > 0 || 
                                 //TODO: Make the EBRC here data somewhere
                                 *public_co == Company::EBRC
-            })
-            .map(|c| c.clone())
+            }).copied()
             .filter(
                 // Check if actually connected
                 // Left to last because slowest
-                |(private_co, public_co)| self.connected_to(private_co.clone(), public_co.clone()),
+                |(private_co, public_co)| self.connected_to(*private_co, *public_co),
             )
             .collect()
     }
@@ -1134,8 +1132,8 @@ impl EBRState {
         COMPANY_FIXED_DETAILS
             .iter()
             .filter(|c| !c.1.private)
-            .filter(|public_c| self.connected_to(private_co, public_c.0.clone()))
-            .map(|c| c.0.clone())
+            .filter(|public_c| self.connected_to(private_co, *public_c.0))
+            .map(|c| *c.0)
             .collect()
     }
 
@@ -1158,7 +1156,7 @@ impl EBRState {
         };
         COMPANY_FIXED_DETAILS
             .iter()
-            .any(|c| self.can_build(c.0.clone(), next_actor))
+            .any(|c| self.can_build(*c.0, next_actor))
     }
 
     fn possible_owned_track(&self, company: Company) -> Vec<Coordinate> {
@@ -1167,11 +1165,10 @@ impl EBRState {
             .iter()
             .filter(|t| {
                 // All owned track
-                t.track_type == TrackType::CompanyOwned(company.clone())
+                t.track_type == TrackType::CompanyOwned(company)
             })
             // All neighboring
-            .map(|t| get_neighbors(t.location))
-            .flatten()
+            .flat_map(|t| get_neighbors(t.location))
             .collect::<HashSet<Coordinate>>() // Unique
             .iter()
             .filter(|t| t.0 < WIDTH && t.1 < HEIGHT)
@@ -1186,18 +1183,16 @@ impl EBRState {
                 }
                 let other_track_in_location = self
                     .track
-                    .iter()
-                    .map(|ot| ot.clone())
-                    .filter(|ot| ot.location == *t)
+                    .iter().filter(|&ot| ot.location == *t).cloned()
                     .collect::<Vec<_>>();
                 // Can't build more track if not permitted
-                if other_track_in_location.len() > 0 && !attr.multiple_allowed {
+                if !other_track_in_location.is_empty() && !attr.multiple_allowed {
                     return None;
                 }
                 // Company can't own multiple track in location
                 if other_track_in_location
                     .iter()
-                    .any(|t| t.track_type == TrackType::CompanyOwned(company.clone()))
+                    .any(|t| t.track_type == TrackType::CompanyOwned(company))
                 {
                     return None;
                 }
@@ -1247,10 +1242,10 @@ impl EBRState {
         let mut to_visit = HashSet::<Coordinate>::new();
         let mut visited = HashSet::<Coordinate>::new();
         to_visit.insert(self.company_details[&company].hq.unwrap());
-        while to_visit.len() > 0 {
-            let coord = to_visit.iter().next().unwrap().clone();
-            let neighbors = get_neighbors(coord.clone());
-            visited.insert(coord.clone());
+        while !to_visit.is_empty() {
+            let coord = *to_visit.iter().next().unwrap();
+            let neighbors = get_neighbors(coord);
+            visited.insert(coord);
             to_visit.remove(&coord);
             to_visit.extend(neighbors.iter().filter(|n| {
                 !visited.contains(n)
@@ -1267,8 +1262,7 @@ impl EBRState {
         let cash = self.company_details[&company].cash;
         self.reachable_narrow_track(company)
             .iter()
-            .map(|t| get_neighbors(*t))
-            .flatten()
+            .flat_map(|t| get_neighbors(*t))
             .filter(|t| t.0 < WIDTH && t.1 < HEIGHT)
             .filter(|t| {
                 !(self.narrow_cost(*t) as isize > cash
@@ -1276,13 +1270,12 @@ impl EBRState {
                     && TERRAIN[t.1][t.0].attributes().buildable
             })
             .collect::<BTreeSet<_>>()
-            .iter()
-            .map(|t| t.clone())
+            .iter().copied()
             .collect()
     }
 
     fn narrow_cost(&self, _t: Coordinate) -> usize {
-        return NARROW_TRACK_COST;
+        NARROW_TRACK_COST
     }
 
     fn can_build(&self, company: Company, player: PlayerID) -> bool {
@@ -1298,12 +1291,12 @@ impl EBRState {
             if company_fixed_details.track_available == 0 {
                 return false;
             }
-            self.possible_owned_track(company).len() > 0
+            !self.possible_owned_track(company).is_empty()
         } else {
             if self.narrow_gauge_remaining == 0 {
                 return false;
             }
-            self.possible_narrow_track(company).len() > 0
+            !self.possible_narrow_track(company).is_empty()
         }
     }
 
@@ -1320,7 +1313,7 @@ impl EBRState {
 
     fn can_take(&self, company: Company) -> bool {
         (self.company_details[&company].cash > TAKE_RESOURCE_COST as isize)
-            && self.company_accessible_resources(company).len() > 0
+            && !self.company_accessible_resources(company).is_empty()
     }
 
     fn company_accessible_resources(&self, company: Company) -> Vec<Coordinate> {
@@ -1328,12 +1321,12 @@ impl EBRState {
         // Minor: Anything connected to narrow
         let company_details = self.company_details.get(&company).unwrap();
         let accessible_spaces = if COMPANY_FIXED_DETAILS[&company].private {
-            let mut spaces = self.possible_owned_track(company.clone());
+            let mut spaces = self.possible_owned_track(company);
             spaces.extend(
                 company_details
                     .owned_privates
                     .iter()
-                    .flat_map(|p| self.reachable_narrow_track(p.clone()))
+                    .flat_map(|p| self.reachable_narrow_track(*p))
                     .collect::<Vec<Coordinate>>(),
             );
             spaces
@@ -1344,8 +1337,7 @@ impl EBRState {
 
         self.resource_cubes
             .iter()
-            .filter(|r| accessible_spaces.contains(r))
-            .map(|coord| *coord)
+            .filter(|r| accessible_spaces.contains(r)).copied()
             .collect()
     }
 
@@ -1353,7 +1345,7 @@ impl EBRState {
         let company_track = self
             .track
             .iter()
-            .filter(|t| t.track_type == TrackType::CompanyOwned(company.clone()));
+            .filter(|t| t.track_type == TrackType::CompanyOwned(company));
         let track_terrain_revenue = company_track
             .clone()
             .map(|t| TERRAIN[t.location.1][t.location.0].attributes().revenue[self.dividends_paid])
@@ -1390,14 +1382,14 @@ impl EBRState {
             .iter()
             .map(|c| {
                 (
-                    c.0.clone(),
+                    *c.0,
                     if c.1.shares_held > 0 {
-                        let rev = self.net_revenue(c.0.clone());
+                        let rev = self.net_revenue(*c.0);
                         // Ceil over 0, floor under 0
                         if rev > 0 {
                             div_ceil(rev, c.1.shares_held as isize)
                         } else {
-                            div_ceil(rev * -1, c.1.shares_held as isize) * -1
+                            -div_ceil(-rev, c.1.shares_held as isize)
                         }
                     } else {
                         0
@@ -1438,9 +1430,7 @@ impl EBRState {
             || self.player_cash.iter().any(|(_, cash)| *cash < 0)
             ||
             // Two of these conditions must be met
-             vec![
-                // No shares unsold
-                self.company_details
+             [self.company_details
                     .iter()
                     .filter(|c| c.1.shares_remaining > 0)
                     .count()
@@ -1449,9 +1439,7 @@ impl EBRState {
                 self.unissued_bonds.len() <= 2,
                 // TODO: 3/4 charters have no remaining trains
                 // <=3 resource cubes on board
-                self.resource_cubes.len() <= 3,
-                    
-            ]
+                self.resource_cubes.len() <= 3]
             .iter()
             .filter(|criteria| **criteria)
             .count()
@@ -1480,22 +1468,22 @@ impl State for EBRState {
                 ..
             } => {
                 let player_cash = *self.player_cash.get(&next_actor).unwrap();
-                if (current_bid.unwrap_or(-1) as isize) < player_cash {
-                    let mut actions: Vec<EBRAction> = (((current_bid.unwrap_or(0) + 1) as isize)
+                if current_bid.unwrap_or(-1) < player_cash {
+                    let mut actions: Vec<EBRAction> = ((current_bid.unwrap_or(0) + 1)
                         ..=player_cash)
                         .map(|bid| EBRAction::Bid(bid as usize))
                         .collect();
-                    if *initial_auction && (*current_bid == None) {
+                    if *initial_auction && current_bid.is_none() {
                         actions.push(EBRAction::Bid(0));
-                    } else if !(*initial_auction) || (*current_bid != None)
+                    } else if !(*initial_auction) || current_bid.is_some()
                     {
                         actions.push(EBRAction::Pass);
                     }
                     actions
                 } else {
-                    vec![if *initial_auction && (*current_bid == None) {
+                    vec![if *initial_auction && current_bid.is_none() {
                         EBRAction::Bid(0)
-                    } else if !(*initial_auction) || (*current_bid != None) {
+                    } else if !(*initial_auction) || current_bid.is_some() {
                         EBRAction::Pass
                     } else {
                         panic!("Somehow, Palapatine has returned")
@@ -1552,8 +1540,8 @@ impl State for EBRState {
                 let cash = self.player_cash[&next_actor];
                 COMPANY_FIXED_DETAILS
                     .iter()
-                    .filter(|c| self.can_auction(c.0.clone(), cash))
-                    .map(|c| EBRAction::ChooseAuctionCompany(c.0.clone()))
+                    .filter(|c| self.can_auction(*c.0, cash))
+                    .map(|c| EBRAction::ChooseAuctionCompany(*c.0))
                     .collect()
             }
             Stage::ChoosePrivateStart(company) => PRIVATE_STARTING_LOCATIONS
@@ -1568,8 +1556,8 @@ impl State for EBRState {
                 .collect(),
             Stage::ChooseBuildCompany => COMPANY_FIXED_DETAILS
                 .iter()
-                .filter(|c| self.can_build(c.0.clone(), next_actor))
-                .map(|c| EBRAction::ChooseBuildCompany(c.0.clone()))
+                .filter(|c| self.can_build(*c.0, next_actor))
+                .map(|c| EBRAction::ChooseBuildCompany(*c.0))
                 .collect(),
             Stage::BuildTrack {
                 company,
@@ -1605,8 +1593,8 @@ impl State for EBRState {
             }
             Stage::ChooseBondCompany => COMPANY_FIXED_DETAILS
                 .iter()
-                .filter(|c| self.can_issue(c.0.clone()))
-                .map(|c| EBRAction::ChooseBondCompany(c.0.clone()))
+                .filter(|c| self.can_issue(*c.0))
+                .map(|c| EBRAction::ChooseBondCompany(*c.0))
                 .collect(),
             Stage::ChooseBond(company) => self
                 .unissued_bonds
@@ -1620,25 +1608,25 @@ impl State for EBRState {
                 .collect(),
             Stage::ChooseTakeResourcesCompany => COMPANY_FIXED_DETAILS
                 .iter()
-                .filter(|c| self.can_take(c.0.clone()))
+                .filter(|c| self.can_take(*c.0))
                 .flat_map(|c| {
                     let delivery_majors = self
                         .company_details
                         .iter()
                         .filter(|(major, _)| self.has_port(**major) || self.has_town(**major))
                         .collect::<Vec<_>>();
-                    if delivery_majors.len() > 0 {
+                    if !delivery_majors.is_empty() {
                         delivery_majors
                             .iter()
                             .map(|major| {
                                 EBRAction::ChooseTakeResourcesCompany(
-                                    c.0.clone(),
-                                    Some(major.0.clone()),
+                                    *c.0,
+                                    Some(*major.0),
                                 )
                             })
                             .collect::<Vec<EBRAction>>()
                     } else {
-                        vec![EBRAction::ChooseTakeResourcesCompany(c.0.clone(), None)]
+                        vec![EBRAction::ChooseTakeResourcesCompany(*c.0, None)]
                     }
                 })
                 .collect(),
@@ -1716,14 +1704,14 @@ impl Game for EBR {
             player_cash: (0..self.player_count)
                 .map(|i| (i, 24 / self.player_count as isize))
                 .collect::<HashMap<u8, isize>>(),
-            revenue: ALL_COMPANIES.iter().map(|c| (c.clone(), 0)).collect(),
+            revenue: ALL_COMPANIES.iter().map(|c| (*c, 0)).collect(),
             action_cubes: ACTION_CUBE_INIT,
             dividends_paid: 0,
             company_details: COMPANY_FIXED_DETAILS
                 .iter()
                 .map(|d| {
                     (
-                        d.0.clone(),
+                        *d.0,
                         CompanyDetails {
                             shares_held: 0,
                             shares_remaining: d.1.stock_available,
@@ -1744,7 +1732,7 @@ impl Game for EBR {
                     )
                 })
                 .collect(),
-            unissued_bonds: BONDS.iter().map(|b| b.clone()).collect::<Vec<Bond>>(),
+            unissued_bonds: BONDS.to_vec(),
             resource_cubes: INITIAL_RESOURCE_CUBES.to_vec(),
             narrow_gauge_remaining: NARROW_GAUGE_INITIAL,
         }
@@ -1888,45 +1876,37 @@ mod test {
         assert!(
             game_state
                 .reachable_narrow_track(Company::GT)
-                .iter()
-                .map(|t| t.clone())
+                .iter().copied()
                 .collect::<HashSet<Coordinate>>()
-                == vec![
-                    COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap(),
+                == [COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap(),
                     (3, 4),
-                    (4, 4)
-                ]
-                .iter()
-                .map(|t| t.clone())
+                    (4, 4)]
+                .iter().copied()
                 .collect::<HashSet<Coordinate>>()
         );
     }
 
     #[test]
     fn test_get_neighbors() {
-        let expected1 = vec![(1, 4), (2, 3), (3, 4), (3, 5), (2, 5), (1, 5)];
+        let expected1 = [(1, 4), (2, 3), (3, 4), (3, 5), (2, 5), (1, 5)];
         let actual1 = get_neighbors((2, 4));
         assert_eq!(
             expected1
-                .iter()
-                .map(|t| t.clone())
+                .iter().copied()
                 .collect::<HashSet<Coordinate>>(),
             actual1
-                .iter()
-                .map(|t| t.clone())
+                .iter().copied()
                 .collect::<HashSet<Coordinate>>()
         );
 
-        let expected2 = vec![(2, 4), (2, 3), (3, 3), (4, 3), (4, 4), (3, 5)];
+        let expected2 = [(2, 4), (2, 3), (3, 3), (4, 3), (4, 4), (3, 5)];
         let actual2 = get_neighbors((3, 4));
         assert_eq!(
             expected2
-                .iter()
-                .map(|t| t.clone())
+                .iter().copied()
                 .collect::<HashSet<Coordinate>>(),
             actual2
-                .iter()
-                .map(|t| t.clone())
+                .iter().copied()
                 .collect::<HashSet<Coordinate>>()
         );
     }

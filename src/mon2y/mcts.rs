@@ -91,7 +91,7 @@ where
                         let child = child.read().unwrap();
                         (
                             action.clone(),
-                            child.value_sum() as f64
+                            child.value_sum()
                                 / if child.visit_count() > 0 {
                                     child.visit_count() as f64
                                 } else {

@@ -77,9 +77,7 @@ pub struct NTState {
 impl NTState {
     fn scores(&self) -> Vec<f64> {
         let mut scores = self
-            .tokens
-            .iter()
-            .map(|(_, tokens)| -1.0 * *tokens as f64)
+            .tokens.values().map(|tokens| -1.0 * *tokens as f64)
             .collect::<Vec<_>>();
         // I know this could be functional, but maybe later.
         for (card, card_state) in &self.cards {

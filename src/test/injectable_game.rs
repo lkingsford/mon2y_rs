@@ -22,11 +22,11 @@ impl State for InjectableGameState {
         self.next_actor.clone()
     }
     fn reward(&self) -> Vec<f64> {
-        return self.injected_reward.clone();
+        self.injected_reward.clone()
     }
 
     fn terminal(&self) -> bool {
-        return self.injected_terminal;
+        self.injected_terminal
     }
 }
 
@@ -51,7 +51,7 @@ impl Action for InjectableGameAction {
         match self {
             InjectableGameAction::NextTurnInjectActionCount(c) => InjectableGameState {
                 injected_permitted_actions: (0..*c)
-                    .map(|i| InjectableGameAction::WinInXTurns(i))
+                    .map(InjectableGameAction::WinInXTurns)
                     .collect(),
                 next_actor,
                 ..state.clone()

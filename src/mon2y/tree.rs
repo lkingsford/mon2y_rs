@@ -50,7 +50,7 @@ where
     /// Returns a path to the current selection
     ///
     pub fn selection(&self) -> Selection<ActionType> {
-        return Tree::select_from(self.root.clone(), self.constant);
+        Tree::select_from(self.root.clone(), self.constant)
     }
 
     fn select_from(node: SNode<StateType, ActionType>, constant: f64) -> Selection<ActionType> {
@@ -204,7 +204,7 @@ where
         match selection {
             Selection::FullyExplored => {
                 log::warn!("Iterate short circuited - fully explored");
-                return (Selection::FullyExplored, None);
+                (Selection::FullyExplored, None)
             }
             Selection::Selection(..) => {
                 let expanded_nodes = self.expansion(&selection);
@@ -406,11 +406,11 @@ mod tests {
         let mut explored_node = create_expanded_node(explored_state, None);
 
         let mut child_node = create_expanded_node(
-            InjectableGameAction::WinInXTurns(1).execute(&explored_node.state()),
+            InjectableGameAction::WinInXTurns(1).execute(explored_node.state()),
             None,
         );
 
-        let grandchild_state = InjectableGameAction::Win.execute(&child_node.state());
+        let grandchild_state = InjectableGameAction::Win.execute(child_node.state());
         let grandchild_node = create_expanded_node(grandchild_state, None);
 
         child_node.insert_child(InjectableGameAction::Win, grandchild_node);
@@ -485,11 +485,11 @@ mod tests {
         let mut explored_node = create_expanded_node(explored_state, None);
 
         let mut child_node = create_expanded_node(
-            InjectableGameAction::WinInXTurns(1).execute(&explored_node.state()),
+            InjectableGameAction::WinInXTurns(1).execute(explored_node.state()),
             None,
         );
 
-        let grandchild_state = InjectableGameAction::Win.execute(&child_node.state());
+        let grandchild_state = InjectableGameAction::Win.execute(child_node.state());
         let grandchild_node = create_expanded_node(grandchild_state, None);
 
         child_node.insert_child(InjectableGameAction::Win, grandchild_node);

@@ -114,7 +114,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                 ..
             } => {
                 *visit_count += 1;
-                *value_sum += reward as f64;
+                *value_sum += reward;
                 if let Ok(mut cached_fully_explored) = cached_fully_explored.write() {
                     *cached_fully_explored = None;
                 } else {
@@ -269,7 +269,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     }
                 }
             }
-            Node::Placeholder { .. } => return,
+            Node::Placeholder { .. } => (),
         }
     }
 }

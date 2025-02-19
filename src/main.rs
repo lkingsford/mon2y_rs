@@ -91,12 +91,7 @@ fn run_game<G: Game>(
                     }
                     Some(PlayerType::M) => calculate_best_turn(
                         iterations,
-                        match time_limit {
-                            None => None,
-                            Some(time_limit) => {
-                                Some(std::time::Duration::from_secs_f32(time_limit))
-                            }
-                        },
+                        time_limit.map(std::time::Duration::from_secs_f32),
                         threads,
                         state.clone(),
                         policy,

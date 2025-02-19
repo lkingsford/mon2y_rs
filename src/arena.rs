@@ -64,16 +64,8 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
                     }
                     Some(PlayerSettings::Mcts(mcts_settings)) => calculate_best_turn(
                         mcts_settings.iterations,
-                        match mcts_settings.time_limit {
-                            None => None,
-                            Some(time_limit) => {
-                                Some(std::time::Duration::from_secs_f32(time_limit))
-                            }
-                        },
-                        match mcts_settings.threads {
-                            None => 4,
-                            Some(thread) => thread,
-                        },
+                        mcts_settings.time_limit.map(std::time::Duration::from_secs_f32),
+                        mcts_settings.threads.unwrap_or(4),
                         state.clone(),
                         mcts_settings.policy,
                         match mcts_settings.exploration_constant {
@@ -130,7 +122,6 @@ fn run_config(config_file: String) {
         };
         let max_result = result
             .iter()
-            .map(|r| r)
             .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Less));
         for (i, r) in result.iter().enumerate() {
             results[i].0 += *r;
@@ -142,7 +133,7 @@ fn run_config(config_file: String) {
     println!();
     println!("{:?}", arena_settings);
     println!("Player\tReward\t%\tWins\t%");
-    let total: f64 = results.iter().map(|r| r.0 as f64).sum();
+    let total: f64 = results.iter().map(|r| r.0).sum();
     for (i, r) in results.iter().enumerate() {
         println!(
             "{}\t{:?}\t{:>5.2}%\t{:?}\t{:>5.2}%",

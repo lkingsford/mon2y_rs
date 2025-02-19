@@ -26,10 +26,10 @@ impl Action for C4Action {
                 }
                 let winner = check_for_win(&new_board);
                 let (terminal, reward) = match winner {
-                    CheckForWinResult::Winner(0) => (true, [1.0 as f64, -1.0 as f64].to_vec()),
-                    CheckForWinResult::Winner(1) => (true, [-1.0 as f64, 1.0 as f64].to_vec()),
-                    CheckForWinResult::Stalemate => (true, [-0.5 as f64, -0.5 as f64].to_vec()),
-                    CheckForWinResult::Ongoing => (false, [0.0 as f64, 0.0 as f64].to_vec()),
+                    CheckForWinResult::Winner(0) => (true, [1.0_f64, -1.0_f64].to_vec()),
+                    CheckForWinResult::Winner(1) => (true, [-1.0_f64, 1.0_f64].to_vec()),
+                    CheckForWinResult::Stalemate => (true, [-0.5_f64, -0.5_f64].to_vec()),
+                    CheckForWinResult::Ongoing => (false, [0.0_f64, 0.0_f64].to_vec()),
                     _ => panic!("Unexpected check_for_win result"),
                 };
                 C4State {
@@ -166,7 +166,7 @@ impl Game for C4 {
         for x in 0..BOARD_WIDTH {
             print!("{}", x);
         }
-        print!("\n");
+        println!();
         for y in 0..BOARD_HEIGHT {
             for x in 0..BOARD_WIDTH {
                 print!(
@@ -179,7 +179,7 @@ impl Game for C4 {
                     }
                 )
             }
-            print!("\n");
+            println!();
         }
     }
 
@@ -197,7 +197,7 @@ impl Game for C4 {
             board: vec![C4Cell::Empty; BOARD_HEIGHT * BOARD_WIDTH],
             next_player: 0,
             terminal: false,
-            reward: [0.0 as f64, 0.0 as f64].to_vec(),
+            reward: [0.0_f64, 0.0_f64].to_vec(),
         }
     }
 }

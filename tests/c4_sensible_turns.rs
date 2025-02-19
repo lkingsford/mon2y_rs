@@ -9,13 +9,11 @@ use mon2y_rs::mon2y::{calculate_best_turn, BestTurnPolicy};
 #[test]
 fn test_c4_one_action_blocks_win() {
     let mut c4_state = C4.init_game();
-    for action in vec![
-        c4::C4Action::Drop(0),
+    for action in [c4::C4Action::Drop(0),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(0),
         c4::C4Action::Drop(1),
-        c4::C4Action::Drop(0),
-    ] {
+        c4::C4Action::Drop(0)] {
         c4_state = action.execute(&c4_state);
     }
     let action = calculate_best_turn(
@@ -33,14 +31,12 @@ fn test_c4_one_action_blocks_win() {
 #[test]
 fn test_c4_one_action_gets_win() {
     let mut c4_state = C4.init_game();
-    for action in vec![
-        c4::C4Action::Drop(3),
+    for action in [c4::C4Action::Drop(3),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(3),
-        c4::C4Action::Drop(1),
-    ] {
+        c4::C4Action::Drop(1)] {
         c4_state = action.execute(&c4_state);
     }
     let action = calculate_best_turn(
@@ -59,14 +55,12 @@ fn test_c4_one_action_gets_win() {
 fn test_c4_play_out_repeated() {
     env_logger::init();
     let mut c4_state = C4.init_game();
-    for action in vec![
-        c4::C4Action::Drop(3),
+    for action in [c4::C4Action::Drop(3),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(3),
-        c4::C4Action::Drop(1),
-    ] {
+        c4::C4Action::Drop(1)] {
         c4_state = action.execute(&c4_state);
     }
     let root_node = create_expanded_node(c4_state, None);
@@ -129,8 +123,7 @@ fn test_c4_full_exploration() {
     // This is more of a test that it doesn't freeze when getting fully explored
     // is very likely.
     let mut c4_state = C4.init_game();
-    for action in vec![
-        c4::C4Action::Drop(3),
+    for action in [c4::C4Action::Drop(3),
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(3),
@@ -151,8 +144,7 @@ fn test_c4_full_exploration() {
         c4::C4Action::Drop(2),
         c4::C4Action::Drop(2),
         c4::C4Action::Drop(2),
-        c4::C4Action::Drop(2),
-    ] {
+        c4::C4Action::Drop(2)] {
         c4_state = action.execute(&c4_state);
     }
 
