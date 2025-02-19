@@ -20,11 +20,14 @@ pub struct CachedUcb {
     parent_visit_count: u32,
 }
 
+// A type alias for a Shared Node
+pub type SNode<StateType, ActionType> = Arc<RwLock<Node<StateType, ActionType>>>;
+
 #[derive(Debug)]
 pub enum Node<StateType: State, ActionType: Action<StateType = StateType>> {
     Expanded {
         state: StateType,
-        children: HashMap<ActionType, Arc<RwLock<Node<StateType, ActionType>>>>,
+        children: HashMap<ActionType, SNode<StateType, ActionType>>,
         visit_count: u32,
         /// Sum of rewards for this player
         value_sum: f64,
@@ -53,7 +56,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
                     }
                 }
                 //log::error!("CACHE MISS");
-                let child_nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>> =
+                let child_nodes: Vec<SNode<StateType, ActionType>> =
                     { children.values().cloned().collect() };
                 let fully_explored = child_nodes.is_empty()
                     || child_nodes.iter().all(|child| {
@@ -203,7 +206,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         }
     }
 
-    pub fn get_child(&self, action: ActionType) -> Arc<RwLock<Node<StateType, ActionType>>> {
+    pub fn get_child(&self, action: ActionType) -> SNode<StateType, ActionType> {
         if let Node::Expanded { children, .. } = self {
             children.get(&action).unwrap().clone()
         } else {
@@ -218,10 +221,7 @@ impl<StateType: State, ActionType: Action<StateType = StateType>> Node<StateType
         create_expanded_node(state, weight)
     }
 
-    pub fn get_node_by_path(
-        &self,
-        path: Vec<ActionType>,
-    ) -> Arc<RwLock<Node<StateType, ActionType>>> {
+    pub fn get_node_by_path(&self, path: Vec<ActionType>) -> SNode<StateType, ActionType> {
         if path.is_empty() {
             panic!("Can't return empty path")
         }
@@ -282,7 +282,7 @@ where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
-    let children: HashMap<ActionType, Arc<RwLock<Node<StateType, ActionType>>>> = {
+    let children: HashMap<ActionType, SNode<StateType, ActionType>> = {
         let node = node_lock.read().unwrap();
         match &*node {
             Node::Expanded { children, .. } => children
@@ -376,10 +376,8 @@ where
     // (I think the Node::new_expanded should be able to work? But my rust brain
     // is still learning and couldn't figure out syntax that the type checker
     // was happy with)
-    let mut children: HashMap<
-        StateType::ActionType,
-        Arc<RwLock<Node<StateType, StateType::ActionType>>>,
-    > = HashMap::new();
+    let mut children: HashMap<StateType::ActionType, SNode<StateType, StateType::ActionType>> =
+        HashMap::new();
     let game_action = match state.next_actor() {
         Actor::Player(_) => {
             for action in state.permitted_actions() {

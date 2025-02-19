@@ -1,5 +1,5 @@
 use super::game::{Action, Actor, State};
-use super::node::Node;
+use super::node::{Node, SNode};
 use super::weighted_random::weighted_random;
 use super::Reward;
 use core::panic;
@@ -14,17 +14,16 @@ pub enum Selection<ActionType: Action> {
 }
 
 pub struct Tree<StateType: State, ActionType: Action<StateType = StateType>> {
-    pub root: Arc<RwLock<Node<StateType, ActionType>>>,
+    pub root: SNode<StateType, ActionType>,
     pub constant: f64,
 }
 
-impl<StateType: State<ActionType = ActionType>, ActionType: Action<StateType = StateType>>
-    Tree<StateType, ActionType>
+impl<StateType, ActionType> Tree<StateType, ActionType>
 where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
 {
-    fn node_ref(root: Node<StateType, ActionType>) -> Arc<RwLock<Node<StateType, ActionType>>> {
+    fn node_ref(root: Node<StateType, ActionType>) -> SNode<StateType, ActionType> {
         // Only doing this to keep it a little tidier
         Arc::new(RwLock::new(root))
     }
@@ -53,10 +52,7 @@ where
         return Tree::select_from(self.root.clone(), self.constant);
     }
 
-    fn select_from(
-        node: Arc<RwLock<Node<StateType, ActionType>>>,
-        constant: f64,
-    ) -> Selection<ActionType> {
+    fn select_from(node: SNode<StateType, ActionType>, constant: f64) -> Selection<ActionType> {
         let best_pick: Vec<_> = super::node::best_pick(&node, constant)
             .iter()
             .map(|x| x.0.clone())
@@ -104,13 +100,13 @@ where
     pub fn expansion(
         &self,
         selection: &Selection<ActionType>,
-    ) -> Vec<Arc<RwLock<Node<StateType, ActionType>>>> {
+    ) -> Vec<SNode<StateType, ActionType>> {
         trace!("Expansion: Selection: {:#?}", selection);
         let mut cur_node = self.root.clone();
         // This root is needed as part of the output to ensure that propagate can work
         // It was either here or selection. Could fit in either place.
         // Could also be in iterate, but that was going to result in more memory allocations.
-        let mut result: Vec<Arc<RwLock<Node<StateType, ActionType>>>> = vec![self.root.clone()];
+        let mut result: Vec<SNode<StateType, ActionType>> = vec![self.root.clone()];
 
         if let Selection::Selection(selection) = selection {
             for action in selection.iter() {
@@ -179,11 +175,7 @@ where
         cur_state.reward()
     }
 
-    pub fn propagate_reward(
-        &self,
-        nodes: Vec<Arc<RwLock<Node<StateType, ActionType>>>>,
-        reward: Vec<Reward>,
-    ) {
+    pub fn propagate_reward(&self, nodes: Vec<SNode<StateType, ActionType>>, reward: Vec<Reward>) {
         let mut previous_node = nodes[0].clone();
         for node in nodes[1..].iter() {
             {
@@ -208,26 +200,33 @@ where
 
     pub fn iterate(&self) -> Selection<ActionType> {
         let selection = self.selection();
-        if let Selection::FullyExplored = selection {
-            log::warn!("Iterate short circuited - fully explored");
-            return Selection::FullyExplored;
-        };
-        let expanded_nodes = self.expansion(&selection);
-        if let Selection::Selection(..) = selection {
-            let reward = {
-                self.play_out(
-                    expanded_nodes
-                        .last()
-                        .unwrap()
-                        .read()
-                        .unwrap()
-                        .state()
-                        .clone(),
-                )
-            };
-            self.propagate_reward(expanded_nodes, reward);
+        // not sure if I actually improved anything here.
+        // using if-lets to shortcicuit is a pattern I often use
+        // but I nocited in this function specifically that there are only two
+        // possible cases, so I used a match instead.
+        match selection {
+            Selection::FullyExplored => {
+                log::warn!("Iterate short circuited - fully explored");
+                return Selection::FullyExplored;
+            }
+            Selection::Selection(..) => {
+                let expanded_nodes = self.expansion(&selection);
+                let reward = {
+                    self.play_out(
+                        expanded_nodes
+                            .last()
+                            .unwrap()
+                            .read()
+                            .unwrap()
+                            .state()
+                            .clone(),
+                    )
+                };
+                self.propagate_reward(expanded_nodes, reward);
+
+                selection
+            }
         }
-        selection
     }
 }
 
