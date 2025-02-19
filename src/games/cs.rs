@@ -354,7 +354,7 @@ mod tests {
         );
 
         for (action, expected_weight) in test_cases {
-            let actual_weight = actions.get((&action)).unwrap_or(&0);
+            let actual_weight = actions.get(&action).unwrap_or(&0);
             assert_eq!(
                 *actual_weight, expected_weight,
                 "Action {:?} has weight {}, expected {}",
