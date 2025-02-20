@@ -178,18 +178,17 @@ impl State for CSState {
         let new_column_allowed = self.locked_in_columns.len() < 3;
         let two_new_columns_allowed = self.locked_in_columns.len() < 2;
         let column_allowed = (2..=12)
-                .map(|col| {
-                    (
-                        col,
-                        // It's my vanity project, and even I think this might be a little much
-                        (new_column_allowed || self.locked_in_columns.contains(&col))
-                            && self.claimed_columns.get(&col).is_none()
-                            && (self.temp_position[col as usize - 2].is_none()
-                                || self.temp_position[col as usize - 2]
-                                    < COLUMNS.get(&col).copied()),
-                    )
-                })
-                .collect::<HashMap<_, _>>();
+            .map(|col| {
+                (
+                    col,
+                    // It's my vanity project, and even I think this might be a little much
+                    (new_column_allowed || self.locked_in_columns.contains(&col))
+                        && self.claimed_columns.get(&col).is_none()
+                        && (self.temp_position[col as usize - 2].is_none()
+                            || self.temp_position[col as usize - 2] < COLUMNS.get(&col).copied()),
+                )
+            })
+            .collect::<HashMap<_, _>>();
 
         // This could be done more programmatically (with less repetition), but the action space is small enough
         // that I'm not worried
@@ -345,9 +344,9 @@ mod tests {
         ];
 
         let actions: HashMap<CSAction, u32> = DICE_ACTIONS
-                .iter()
-                .map(|(action, weight)| (*action, *weight))
-                .collect::<HashMap<_, _>>();
+            .iter()
+            .map(|(action, weight)| (*action, *weight))
+            .collect::<HashMap<_, _>>();
 
         for (action, expected_weight) in test_cases {
             let actual_weight = actions.get(&action).unwrap_or(&0);

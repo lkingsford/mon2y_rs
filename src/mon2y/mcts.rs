@@ -24,7 +24,8 @@ pub fn calculate_best_turn<
     policy: BestTurnPolicy,
     exploration_constant: f64,
     log_children: bool,
-) -> <StateType as State>::ActionType
+    annotate: bool,
+) -> (<StateType as State>::ActionType, Vec<Annotation>)
 where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
@@ -34,39 +35,49 @@ where
     if let Node::Expanded { children, .. } = &root_node {
         if children.len() == 1 {
             log::debug!("Short circuited - only one option");
-            return children.keys().next().unwrap().clone();
+            return( children.keys().next().unwrap().clone(), vec![])
         }
     }
 
     let tree = Tree::new_with_constant(root_node, exploration_constant);
     let finished_iterations = AtomicUsize::new(0);
+    let annotations: Vec<Annotation> = vec![];
 
-    std::thread::scope(|scope| {
-        for _ in 0..thread_count {
-            scope.spawn(|| loop {
-                let mut annotations: Vec<Annotation> = vec![];
-                {
-                    let time_started = std::time::Instant::now();
-                    trace!(
-                        "Starting iteration {}",
-                        finished_iterations.load(atomic::Ordering::SeqCst)
-                    );
-                    let (result, annotation) = tree.iterate();
-                    if let Some(annotation) = annotation {
-                        annotations.push(annotation)
-                    };
-                    let current_iterations =
-                        finished_iterations.fetch_add(1, atomic::Ordering::SeqCst);
-                    trace!("Finished iteration {}", current_iterations);
-                    if current_iterations >= iterations
-                        || result == Selection::FullyExplored
-                        || time_started.elapsed() > time_limit.unwrap_or(std::time::Duration::MAX)
-                    {
-                        break;
+    let results =
+        std::thread::scope(|scope| {
+        let mut handles = Vec::with_capacity(thread_count);
+        (0..thread_count)
+            .map(|_| {
+                scope.spawn(|| -> Vec<Annotation> {
+                    let mut annotations: Vec<Annotation> = vec![];
+                    loop {
+                        let time_started = std::time::Instant::now();
+                        trace!(
+                            "Starting iteration {}",
+                            finished_iterations.load(atomic::Ordering::SeqCst)
+                        );
+                        let (result, annotation) = tree.iterate();
+                        if annotate {
+                        if let Some(annotation) = annotation {
+                            annotations.push(annotation)
+                        }};
+                        let current_iterations =
+                            finished_iterations.fetch_add(1, atomic::Ordering::SeqCst);
+                        trace!("Finished iteration {}", current_iterations);
+                        if current_iterations >= iterations
+                            || result == Selection::FullyExplored
+                            || time_started.elapsed()
+                                > time_limit.unwrap_or(std::time::Duration::MAX)
+                        {
+                            break;
+                        }
                     }
-                }
-            });
-        }
+                    annotations
+                })
+            })
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap())
+            .collect()
     });
 
     log::debug!(
@@ -104,7 +115,7 @@ where
             };
             picks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             log::debug!("Action, UCB0: {:?}", picks);
-            picks[0].0.clone()
+            (picks[0].0.clone(), annotations)
         }
 
         BestTurnPolicy::MostVisits => {
@@ -145,7 +156,7 @@ where
                                         )
                                 {
                                     if index == player_id as usize {
-                                        return Some(action.clone());
+                                        return (Some(action.clone()), annotations)
                                     }
                                 }
                             }
@@ -154,7 +165,7 @@ where
                     })
                     .collect();
                 if let Some(action) = winning_moves.first() {
-                    return action.clone();
+                    return (action.clone(), annotations)
                 }
 
                 children

@@ -867,13 +867,7 @@ impl Action for EBRAction {
                             player,
                             companies
                                 .iter()
-                                .map(|c| {
-                                    if c != private {
-                                        *c
-                                    } else {
-                                        *company
-                                    }
-                                })
+                                .map(|c| if c != private { *c } else { *company })
                                 .collect(),
                         )
                     })
@@ -1044,9 +1038,7 @@ impl EBRState {
         if self.unissued_bonds.is_empty() {
             return false;
         }
-        COMPANY_FIXED_DETAILS
-            .iter()
-            .any(|c| self.can_issue(*c.0))
+        COMPANY_FIXED_DETAILS.iter().any(|c| self.can_issue(*c.0))
     }
     fn can_issue(&self, company: Company) -> bool {
         if COMPANY_FIXED_DETAILS[&company].private {
@@ -1070,7 +1062,8 @@ impl EBRState {
 
     fn merge_options(&self, player: PlayerID) -> BTreeSet<(Company, Company)> {
         self.holdings[&player]
-            .iter().copied()
+            .iter()
+            .copied()
             .collect::<BTreeSet<Company>>()
             .iter()
             .filter(|c| {
@@ -1082,9 +1075,7 @@ impl EBRState {
                 if COMPANY_FIXED_DETAILS[c].private {
                     COMPANY_FIXED_DETAILS
                         .iter()
-                        .filter(|possible_public| {
-                            !COMPANY_FIXED_DETAILS[possible_public.0].private
-                        })
+                        .filter(|possible_public| !COMPANY_FIXED_DETAILS[possible_public.0].private)
                         .map(|public_co| (*c, *public_co.0))
                         .collect::<Vec<(Company, Company)>>()
                 } else {
@@ -1106,7 +1097,8 @@ impl EBRState {
                 self.company_details[public_co].shares_remaining > 0 || 
                                 //TODO: Make the EBRC here data somewhere
                                 *public_co == Company::EBRC
-            }).copied()
+            })
+            .copied()
             .filter(
                 // Check if actually connected
                 // Left to last because slowest
@@ -1183,7 +1175,9 @@ impl EBRState {
                 }
                 let other_track_in_location = self
                     .track
-                    .iter().filter(|&ot| ot.location == *t).cloned()
+                    .iter()
+                    .filter(|&ot| ot.location == *t)
+                    .cloned()
                     .collect::<Vec<_>>();
                 // Can't build more track if not permitted
                 if !other_track_in_location.is_empty() && !attr.multiple_allowed {
@@ -1270,7 +1264,8 @@ impl EBRState {
                     && TERRAIN[t.1][t.0].attributes().buildable
             })
             .collect::<BTreeSet<_>>()
-            .iter().copied()
+            .iter()
+            .copied()
             .collect()
     }
 
@@ -1337,7 +1332,8 @@ impl EBRState {
 
         self.resource_cubes
             .iter()
-            .filter(|r| accessible_spaces.contains(r)).copied()
+            .filter(|r| accessible_spaces.contains(r))
+            .copied()
             .collect()
     }
 
@@ -1475,8 +1471,7 @@ impl State for EBRState {
                         .collect();
                     if *initial_auction && current_bid.is_none() {
                         actions.push(EBRAction::Bid(0));
-                    } else if !(*initial_auction) || current_bid.is_some()
-                    {
+                    } else if !(*initial_auction) || current_bid.is_some() {
                         actions.push(EBRAction::Pass);
                     }
                     actions
@@ -1619,10 +1614,7 @@ impl State for EBRState {
                         delivery_majors
                             .iter()
                             .map(|major| {
-                                EBRAction::ChooseTakeResourcesCompany(
-                                    *c.0,
-                                    Some(*major.0),
-                                )
+                                EBRAction::ChooseTakeResourcesCompany(*c.0, Some(*major.0))
                             })
                             .collect::<Vec<EBRAction>>()
                     } else {
@@ -1790,7 +1782,6 @@ fn get_neighbors(coord: Coordinate) -> Vec<Coordinate> {
 }
 
 mod test {
-    
 
     use super::*;
 
@@ -1876,12 +1867,16 @@ mod test {
         assert!(
             game_state
                 .reachable_narrow_track(Company::GT)
-                .iter().copied()
+                .iter()
+                .copied()
                 .collect::<HashSet<Coordinate>>()
-                == [COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap(),
+                == [
+                    COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap(),
                     (3, 4),
-                    (4, 4)]
-                .iter().copied()
+                    (4, 4)
+                ]
+                .iter()
+                .copied()
                 .collect::<HashSet<Coordinate>>()
         );
     }
@@ -1891,23 +1886,15 @@ mod test {
         let expected1 = [(1, 4), (2, 3), (3, 4), (3, 5), (2, 5), (1, 5)];
         let actual1 = get_neighbors((2, 4));
         assert_eq!(
-            expected1
-                .iter().copied()
-                .collect::<HashSet<Coordinate>>(),
-            actual1
-                .iter().copied()
-                .collect::<HashSet<Coordinate>>()
+            expected1.iter().copied().collect::<HashSet<Coordinate>>(),
+            actual1.iter().copied().collect::<HashSet<Coordinate>>()
         );
 
         let expected2 = [(2, 4), (2, 3), (3, 3), (4, 3), (4, 4), (3, 5)];
         let actual2 = get_neighbors((3, 4));
         assert_eq!(
-            expected2
-                .iter().copied()
-                .collect::<HashSet<Coordinate>>(),
-            actual2
-                .iter().copied()
-                .collect::<HashSet<Coordinate>>()
+            expected2.iter().copied().collect::<HashSet<Coordinate>>(),
+            actual2.iter().copied().collect::<HashSet<Coordinate>>()
         );
     }
 }

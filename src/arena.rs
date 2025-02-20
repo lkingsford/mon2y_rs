@@ -62,9 +62,11 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
                             .clone()
                     }
-                    Some(PlayerSettings::Mcts(mcts_settings)) => calculate_best_turn(
+                    (Some(PlayerSettings::Mcts(mcts_settings)), _) => calculate_best_turn(
                         mcts_settings.iterations,
-                        mcts_settings.time_limit.map(std::time::Duration::from_secs_f32),
+                        mcts_settings
+                            .time_limit
+                            .map(std::time::Duration::from_secs_f32),
                         mcts_settings.threads.unwrap_or(4),
                         state.clone(),
                         mcts_settings.policy,
@@ -72,6 +74,7 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
                             None => 2.0_f64.sqrt(),
                             Some(constant) => constant,
                         },
+                        false,
                         false,
                     ),
                     _ => todo!(),

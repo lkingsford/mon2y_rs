@@ -9,11 +9,13 @@ use mon2y_rs::mon2y::{calculate_best_turn, BestTurnPolicy};
 #[test]
 fn test_c4_one_action_blocks_win() {
     let mut c4_state = C4.init_game();
-    for action in [c4::C4Action::Drop(0),
+    for action in [
+        c4::C4Action::Drop(0),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(0),
         c4::C4Action::Drop(1),
-        c4::C4Action::Drop(0)] {
+        c4::C4Action::Drop(0),
+    ] {
         c4_state = action.execute(&c4_state);
     }
     let action = calculate_best_turn(
@@ -24,6 +26,7 @@ fn test_c4_one_action_blocks_win() {
         BestTurnPolicy::MostVisits,
         2.0_f64.sqrt(),
         false,
+        false,
     );
     assert_eq!(action, c4::C4Action::Drop(0));
 }
@@ -31,21 +34,24 @@ fn test_c4_one_action_blocks_win() {
 #[test]
 fn test_c4_one_action_gets_win() {
     let mut c4_state = C4.init_game();
-    for action in [c4::C4Action::Drop(3),
-        c4::C4Action::Drop(1),
+    for action in [
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(3),
-        c4::C4Action::Drop(1)] {
+        c4::C4Action::Drop(1),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(1),
+    ] {
         c4_state = action.execute(&c4_state);
     }
-    let action = calculate_best_turn(
+    let (action, _) = calculate_best_turn(
         100,
         None,
         1,
         c4_state,
         BestTurnPolicy::MostVisits,
         2.0_f64.sqrt(),
+        false,
         false,
     );
     assert_eq!(action, c4::C4Action::Drop(3));
@@ -55,12 +61,14 @@ fn test_c4_one_action_gets_win() {
 fn test_c4_play_out_repeated() {
     env_logger::init();
     let mut c4_state = C4.init_game();
-    for action in [c4::C4Action::Drop(3),
-        c4::C4Action::Drop(1),
+    for action in [
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(1),
         c4::C4Action::Drop(3),
-        c4::C4Action::Drop(1)] {
+        c4::C4Action::Drop(1),
+        c4::C4Action::Drop(3),
+        c4::C4Action::Drop(1),
+    ] {
         c4_state = action.execute(&c4_state);
     }
     let root_node = create_expanded_node(c4_state, None);
@@ -86,13 +94,14 @@ fn test_c4_plays_through_without_crash() {
     let mut c4_state = C4.init_game();
     while !c4_state.terminal() {
         if let mon2y_rs::mon2y::game::Actor::Player(_) = c4_state.next_actor() {
-            let action = calculate_best_turn(
+            let (action, _) = calculate_best_turn(
                 100,
                 None,
                 1,
                 c4_state.clone(),
                 BestTurnPolicy::MostVisits,
                 2.0_f64.sqrt(),
+                false,
                 false,
             );
             c4_state = action.execute(&c4_state);
@@ -104,13 +113,14 @@ fn test_c4_plays_through_multiple_threads_without_crash() {
     let mut c4_state = C4.init_game();
     while !c4_state.terminal() {
         if let mon2y_rs::mon2y::game::Actor::Player(_) = c4_state.next_actor() {
-            let action = calculate_best_turn(
+            let (action, _) = calculate_best_turn(
                 100,
                 None,
                 4,
                 c4_state.clone(),
                 BestTurnPolicy::MostVisits,
                 2.0_f64.sqrt(),
+                false,
                 false,
             );
             c4_state = action.execute(&c4_state);
@@ -123,7 +133,8 @@ fn test_c4_full_exploration() {
     // This is more of a test that it doesn't freeze when getting fully explored
     // is very likely.
     let mut c4_state = C4.init_game();
-    for action in [c4::C4Action::Drop(3),
+    for action in [
+        c4::C4Action::Drop(3),
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(3),
         c4::C4Action::Drop(3),
@@ -144,7 +155,8 @@ fn test_c4_full_exploration() {
         c4::C4Action::Drop(2),
         c4::C4Action::Drop(2),
         c4::C4Action::Drop(2),
-        c4::C4Action::Drop(2)] {
+        c4::C4Action::Drop(2),
+    ] {
         c4_state = action.execute(&c4_state);
     }
 
@@ -155,6 +167,7 @@ fn test_c4_full_exploration() {
         c4_state,
         BestTurnPolicy::MostVisits,
         2.0_f64.sqrt(),
+        false,
         false,
     );
 }
