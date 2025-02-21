@@ -18,7 +18,7 @@ fn test_c4_one_action_blocks_win() {
     ] {
         c4_state = action.execute(&c4_state);
     }
-    let action = calculate_best_turn(
+    let (action, _) = calculate_best_turn(
         100,
         None,
         1,

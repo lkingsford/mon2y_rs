@@ -35,17 +35,14 @@ where
     if let Node::Expanded { children, .. } = &root_node {
         if children.len() == 1 {
             log::debug!("Short circuited - only one option");
-            return( children.keys().next().unwrap().clone(), vec![])
+            return (children.keys().next().unwrap().clone(), vec![]);
         }
     }
 
     let tree = Tree::new_with_constant(root_node, exploration_constant);
     let finished_iterations = AtomicUsize::new(0);
-    let annotations: Vec<Annotation> = vec![];
 
-    let results =
-        std::thread::scope(|scope| {
-        let mut handles = Vec::with_capacity(thread_count);
+    let annotations: Vec<Annotation> = std::thread::scope(|scope| {
         (0..thread_count)
             .map(|_| {
                 scope.spawn(|| -> Vec<Annotation> {
@@ -58,9 +55,10 @@ where
                         );
                         let (result, annotation) = tree.iterate();
                         if annotate {
-                        if let Some(annotation) = annotation {
-                            annotations.push(annotation)
-                        }};
+                            if let Some(annotation) = annotation {
+                                annotations.push(annotation)
+                            }
+                        };
                         let current_iterations =
                             finished_iterations.fetch_add(1, atomic::Ordering::SeqCst);
                         trace!("Finished iteration {}", current_iterations);
@@ -156,7 +154,7 @@ where
                                         )
                                 {
                                     if index == player_id as usize {
-                                        return (Some(action.clone()), annotations)
+                                        return Some(action.clone());
                                     }
                                 }
                             }
@@ -165,15 +163,18 @@ where
                     })
                     .collect();
                 if let Some(action) = winning_moves.first() {
-                    return (action.clone(), annotations)
+                    return (action.clone(), annotations);
                 }
 
-                children
-                    .iter()
-                    .max_by_key(|(_, node)| node.read().unwrap().visit_count())
-                    .unwrap()
-                    .0
-                    .clone()
+                (
+                    children
+                        .iter()
+                        .max_by_key(|(_, node)| node.read().unwrap().visit_count())
+                        .unwrap()
+                        .0
+                        .clone(),
+                    annotations,
+                )
             } else {
                 panic!("Expected root to be an expanded node")
             }

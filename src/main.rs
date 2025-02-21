@@ -89,15 +89,19 @@ fn run_game<G: Game>(
                         permitted_actions[rand::thread_rng().gen_range(0..permitted_actions.len())]
                             .clone()
                     }
-                    Some(PlayerType::M) => calculate_best_turn(
-                        iterations,
-                        time_limit.map(std::time::Duration::from_secs_f32),
-                        threads,
-                        state.clone(),
-                        policy,
-                        constant,
-                        log_children,
-                    ),
+                    Some(PlayerType::M) => {
+                        calculate_best_turn(
+                            iterations,
+                            time_limit.map(std::time::Duration::from_secs_f32),
+                            threads,
+                            state.clone(),
+                            policy,
+                            constant,
+                            log_children,
+                            false,
+                        )
+                        .0
+                    }
                     _ => todo!(),
                 };
                 log::info!("Player {} plays {:?}", player, action);
