@@ -1471,7 +1471,9 @@ impl State for EBRState {
                         .collect();
                     if *initial_auction && current_bid.is_none() {
                         actions.push(EBRAction::Bid(0));
-                    } else if !(*initial_auction) || current_bid.is_some() {
+                    } else if (!(*initial_auction) && *current_bid != None)
+                        || (*current_bid != None)
+                    {
                         actions.push(EBRAction::Pass);
                     }
                     actions
