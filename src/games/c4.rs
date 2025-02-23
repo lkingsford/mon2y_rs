@@ -139,6 +139,7 @@ pub struct C4State {
 
 impl State for C4State {
     type ActionType = C4Action;
+    type AnnotationType = ();
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
         (0..BOARD_WIDTH)
             .filter(|&i| self.board[i] == C4Cell::Empty)

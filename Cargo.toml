@@ -25,3 +25,7 @@ path = "src/bench.rs"
 [[bin]]
 name = "arena"
 path = "src/arena.rs"
+
+[[bin]]
+name = "explorer"
+path = "src/explorer.rs"

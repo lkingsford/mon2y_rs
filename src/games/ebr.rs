@@ -1,4 +1,5 @@
 use log::warn;
+use serde::Serialize;
 use std::cmp::max;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
@@ -22,7 +23,7 @@ enum EndGameReason {
     Resources,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum ChoosableAction {
     BuildTrack,
     AuctionShare,
@@ -53,7 +54,7 @@ const ACTION_CUBE_INIT: ActionCubeSpaces = [
     false, false, false, false, false, true, true, true, false, false, true,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 struct Bond {
     face_value: usize,
     coupon: usize,
@@ -120,7 +121,7 @@ enum FeatureType {
     Water2,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Copy, Serialize)]
 enum Company {
     EBRC,
     LW,
@@ -526,7 +527,7 @@ const TAKE_DIVIDEND: usize = 1;
 const TAKE_TOWN_DELIVER_DIVIDEND: usize = 1;
 const TAKE_PORT_DELIVER_DIVIDEND: usize = 1;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize)]
 pub enum EBRAction {
     Bid(usize),
     Pass,
@@ -548,14 +549,20 @@ pub enum EBRAction {
 impl Action for EBRAction {
     type StateType = EBRState;
     fn execute(&self, state: &Self::StateType) -> Self::StateType {
+                let mut state = state.clone();
+        {
+            let Actor::Player(actor) = state.next_actor else {
+                unreachable!()
+            };
+            state.turns.push((actor, self.clone()));
+        }
+
         match self {
             EBRAction::Stalemate => {
-                let mut state = state.clone();
                 state.terminal = true;
                 state
             }
             EBRAction::Bid(bid) => {
-                let mut state = state.clone();
                 let stage = state.stage;
                 match stage {
                     Stage::Auction {
@@ -585,7 +592,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::Pass => {
-                let mut state = state.clone();
                 let stage = state.stage.clone();
                 match stage {
                     Stage::Auction {
@@ -625,6 +631,9 @@ impl Action for EBRAction {
                             current_bid.unwrap_or(0);
                         {
                             let company_details = state.company_details.get_mut(&lot).unwrap();
+                            if company_details.shares_held == 0 {
+                                state.initial_stock_holder.insert(lot, winning_bidder);
+                            }
                             company_details.shares_held += 1;
                             company_details.shares_remaining -= 1;
                             company_details.cash += current_bid.unwrap();
@@ -672,7 +681,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::MoveCube(from, to) => {
-                let mut state = state.clone();
                 let Actor::Player(next_actor) = state.next_actor else {
                     unreachable!()
                 };
@@ -708,7 +716,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::ChooseAuctionCompany(company) => {
-                let mut state = state.clone();
                 if !COMPANY_FIXED_DETAILS[company].private {
                     state.stage = Stage::Auction {
                         initial_auction: false,
@@ -723,7 +730,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::StartPrivateAt(company, location) => {
-                let mut state = state.clone();
                 state.company_details.get_mut(company).unwrap().hq = Some(*location);
                 state.stage = Stage::Auction {
                     initial_auction: false,
@@ -763,7 +769,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::ChooseBuildCompany(company) => {
-                let mut state = state.clone();
                 state.stage = Stage::BuildTrack {
                     company: *company,
                     completed_builds: 0,
@@ -771,7 +776,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::BuildTrack(location) => {
-                let mut state = state.clone();
                 if let Stage::BuildTrack {
                     company,
                     completed_builds,
@@ -818,18 +822,15 @@ impl Action for EBRAction {
                 }
             }
             EBRAction::BuildPass => {
-                let mut state = state.clone();
                 state.stage = Stage::ChooseAction;
                 state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
                 state
             }
             EBRAction::ChooseBondCompany(company) => {
-                let mut state = state.clone();
                 state.stage = Stage::ChooseBond(*company);
                 state
             }
             EBRAction::IssueBond(company, bond) => {
-                let mut state = state.clone();
                 let details = state.company_details.get_mut(company).unwrap();
                 details.cash += bond.face_value as isize;
                 details.bonds.push(BondDetails {
@@ -842,7 +843,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::Merge(private, company) => {
-                let mut state = state.clone();
                 {
                     let (private_cash, private_bonds) = {
                         let private_details = state.company_details.get_mut(private).unwrap();
@@ -877,7 +877,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::ChooseTakeResourcesCompany(company, delivery_company) => {
-                let mut state = state.clone();
                 state.stage = Stage::TakeResources {
                     company: *company,
                     delivery_company: *company,
@@ -886,7 +885,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::TakeResources(coordinate) => {
-                let mut state = state.clone();
                 if let Stage::TakeResources {
                     company,
                     delivery_company,
@@ -930,7 +928,6 @@ impl Action for EBRAction {
                 state
             }
             EBRAction::PassTakeResources => {
-                let mut state = state.clone();
                 state.stage = Stage::ChooseAction;
                 state.next_actor = Actor::Player((state.active_player + 1) % state.player_count);
                 state
@@ -941,13 +938,13 @@ impl Action for EBRAction {
 
 type PlayerID = u8;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 enum TrackType {
     CompanyOwned(Company),
     Narrow,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Clone, Debug)]
 struct Track {
     location: Coordinate,
     track_type: TrackType,
@@ -981,8 +978,21 @@ enum Stage {
     ChooseMerge,
 }
 
+#[derive(Serialize, Debug)]
+pub struct EBRAnnotation {
+    reward: Vec<f64>,
+    cash: HashMap<PlayerID,isize>,
+    bankruptcy: bool,
+    track: Vec<Track>,
+    turns: Vec<(PlayerID, EBRAction)>,
+    holdings: HashMap<PlayerID, HashMap<Company, usize>>,
+    initial_stock_holder: HashMap<Company, Option<PlayerID>>,
+    private_hq_locations: HashMap<Company, Option<Coordinate>>,
+}
+
 #[derive(Clone, Debug)]
 pub struct EBRState {
+    turns: Vec<(PlayerID, EBRAction)>,
     terminal: bool,
     next_actor: Actor<EBRAction>,
     active_player: PlayerID,
@@ -998,6 +1008,7 @@ pub struct EBRState {
     unissued_bonds: Vec<Bond>,
     resource_cubes: Vec<Coordinate>,
     narrow_gauge_remaining: usize,
+    initial_stock_holder: HashMap<Company, Option<PlayerID>>,
 }
 
 impl EBRState {
@@ -1445,6 +1456,7 @@ impl EBRState {
 
 impl State for EBRState {
     type ActionType = EBRAction;
+    type AnnotationType = EBRAnnotation;
 
     fn next_actor(&self) -> Actor<EBRAction> {
         self.next_actor.clone()
@@ -1471,8 +1483,8 @@ impl State for EBRState {
                         .collect();
                     if *initial_auction && current_bid.is_none() {
                         actions.push(EBRAction::Bid(0));
-                    } else if (!(*initial_auction) && *current_bid != None)
-                        || (*current_bid != None)
+                    } else if (!(*initial_auction) && current_bid.is_some())
+                        || current_bid.is_some()
                     {
                         actions.push(EBRAction::Pass);
                     }
@@ -1668,6 +1680,31 @@ impl State for EBRState {
     fn terminal(&self) -> bool {
         self.terminal
     }
+
+
+    fn annotation(&self) -> Option<Self::AnnotationType> {
+        Some(EBRAnnotation {
+               reward: self.reward(), 
+               cash: self.player_cash.clone(),
+               bankruptcy: self.player_cash.iter().any(|(_, cash)| *cash < 0),
+               track: self.track.clone(),
+               holdings: self.holdings.iter().map(|(player, holdings)| {
+                   (*player, holdings.iter().fold(HashMap::new(), |mut acc, company| {
+                       *acc.entry(*company).or_insert(0) += 1;
+                       acc
+                   }))
+               }).collect(),
+               turns: self.turns.clone(),
+               initial_stock_holder: self.initial_stock_holder.clone(),
+               private_hq_locations:
+               self.company_details
+               .iter()
+               .filter(|(company, _)| COMPANY_FIXED_DETAILS[company].private)
+               .map(|(company, details)| (*company, details.hq))
+               .collect()
+
+        })
+    }
 }
 
 pub struct EBR {
@@ -1680,10 +1717,12 @@ impl Game for EBR {
 
     fn init_game(&self) -> Self::StateType {
         EBRState {
+            turns: vec![],
             terminal: false,
             next_actor: Actor::Player(0),
             player_count: self.player_count,
             track: INITIAL_TRACK.to_vec(),
+            initial_stock_holder: HashMap::new(),
             active_player: 0,
             stage: Stage::Auction {
                 initial_auction: true,

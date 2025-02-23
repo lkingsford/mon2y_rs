@@ -11,7 +11,6 @@ use game::Game;
 use games::Games;
 use games::{C4, CS, EBR, NT};
 use log::Record;
-use mon2y::annotation::Annotation;
 use mon2y::game::{Action, Actor, State};
 use mon2y::{calculate_best_turn, BestTurnPolicy};
 use rand::Rng;
@@ -57,34 +56,36 @@ fn run_episode<G: Game>(game: G, players: Vec<PlayerSettings>) -> Vec<f64> {
         let actor = state.next_actor();
         match actor {
             Actor::Player(player) => {
-                let (action, _annotations): (G::ActionType, Vec<Annotation>) =
-                    match players.get(player as usize) {
-                        Some(PlayerSettings::Random) => {
-                            let permitted_actions = state.permitted_actions();
-                            (
-                                permitted_actions
-                                    [rand::thread_rng().gen_range(0..permitted_actions.len())]
-                                .clone(),
-                                vec![],
-                            )
-                        }
-                        Some(PlayerSettings::Mcts(mcts_settings)) => calculate_best_turn(
-                            mcts_settings.iterations,
-                            mcts_settings
-                                .time_limit
-                                .map(std::time::Duration::from_secs_f32),
-                            mcts_settings.threads.unwrap_or(4),
-                            state.clone(),
-                            mcts_settings.policy,
-                            match mcts_settings.exploration_constant {
-                                None => 2.0_f64.sqrt(),
-                                Some(constant) => constant,
-                            },
-                            false,
-                            false,
-                        ),
-                        _ => todo!(),
-                    };
+                let (action, _annotations): (
+                    G::ActionType,
+                    Vec<<G::StateType as State>::AnnotationType>,
+                ) = match players.get(player as usize) {
+                    Some(PlayerSettings::Random) => {
+                        let permitted_actions = state.permitted_actions();
+                        (
+                            permitted_actions
+                                [rand::thread_rng().gen_range(0..permitted_actions.len())]
+                            .clone(),
+                            vec![],
+                        )
+                    }
+                    Some(PlayerSettings::Mcts(mcts_settings)) => calculate_best_turn(
+                        mcts_settings.iterations,
+                        mcts_settings
+                            .time_limit
+                            .map(std::time::Duration::from_secs_f32),
+                        mcts_settings.threads.unwrap_or(4),
+                        state.clone(),
+                        mcts_settings.policy,
+                        match mcts_settings.exploration_constant {
+                            None => 2.0_f64.sqrt(),
+                            Some(constant) => constant,
+                        },
+                        false,
+                        false,
+                    ),
+                    _ => todo!(),
+                };
                 log::debug!("Player {} plays {:?}", player, action);
                 state = action.execute(&state);
             }

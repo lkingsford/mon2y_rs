@@ -15,6 +15,7 @@ pub struct InjectableGameState {
 
 impl State for InjectableGameState {
     type ActionType = InjectableGameAction;
+    type AnnotationType = ();
     fn permitted_actions(&self) -> Vec<Self::ActionType> {
         self.injected_permitted_actions.clone()
     }

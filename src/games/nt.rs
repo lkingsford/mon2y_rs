@@ -98,6 +98,7 @@ impl NTState {
 
 impl State for NTState {
     type ActionType = NTAction;
+    type AnnotationType = ();
 
     fn next_actor(&self) -> Actor<NTAction> {
         match self.to_draw {

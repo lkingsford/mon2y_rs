@@ -1,5 +1,6 @@
 // src/games/cs.rs
 use linked_hash_set::LinkedHashSet;
+use serde::Serialize;
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -163,8 +164,15 @@ impl CSState {
     }
 }
 
+#[derive(Serialize, Debug)]
+pub struct CSAnnotation {
+    reward: Vec<f64>,
+    claimed_columns: HashMap<ColumnID, Option<PlayerID>>,
+}
+
 impl State for CSState {
     type ActionType = CSAction;
+    type AnnotationType = CSAnnotation;
 
     fn next_actor(&self) -> Actor<CSAction> {
         self.next_actor.clone()
@@ -281,6 +289,13 @@ impl State for CSState {
         self.player_claimed_count()
             .values()
             .any(|&count| count >= 3)
+    }
+
+    fn annotation(&self) -> Option<Self::AnnotationType> {
+        Some(CSAnnotation {
+            reward: self.reward(),
+            claimed_columns: self.claimed_columns.clone(),
+        })
     }
 }
 

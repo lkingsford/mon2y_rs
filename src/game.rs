@@ -3,6 +3,7 @@ use std::io;
 pub trait Game {
     type StateType: State<ActionType = Self::ActionType> + 'static + Send + Sync;
     type ActionType: Action<StateType = Self::StateType> + 'static + Send + Sync;
+
     fn get_human_turn(&self, state: &Self::StateType) -> Self::ActionType {
         for (i, action) in state.permitted_actions().iter().enumerate() {
             println!("{} {:?}", i, action);

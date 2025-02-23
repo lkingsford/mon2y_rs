@@ -2,7 +2,6 @@ use std::sync::atomic::{self, AtomicUsize};
 
 use log::trace;
 
-use crate::mon2y::annotation::Annotation;
 use crate::mon2y::game::Actor;
 use crate::mon2y::tree::Selection;
 
@@ -25,7 +24,10 @@ pub fn calculate_best_turn<
     exploration_constant: f64,
     log_children: bool,
     annotate: bool,
-) -> (<StateType as State>::ActionType, Vec<Annotation>)
+) -> (
+    <StateType as State>::ActionType,
+    Vec<StateType::AnnotationType>,
+)
 where
     StateType: State<ActionType = ActionType>,
     ActionType: Action<StateType = StateType>,
@@ -42,11 +44,11 @@ where
     let tree = Tree::new_with_constant(root_node, exploration_constant);
     let finished_iterations = AtomicUsize::new(0);
 
-    let annotations: Vec<Annotation> = std::thread::scope(|scope| {
+    let annotations: Vec<StateType::AnnotationType> = std::thread::scope(|scope| {
         (0..thread_count)
             .map(|_| {
-                scope.spawn(|| -> Vec<Annotation> {
-                    let mut annotations: Vec<Annotation> = vec![];
+                scope.spawn(|| -> Vec<StateType::AnnotationType> {
+                    let mut annotations: Vec<StateType::AnnotationType> = vec![];
                     loop {
                         let time_started = std::time::Instant::now();
                         trace!(
@@ -73,7 +75,6 @@ where
                     annotations
                 })
             })
-            .into_iter()
             .flat_map(|handle| handle.join().unwrap())
             .collect()
     });
