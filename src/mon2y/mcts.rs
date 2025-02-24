@@ -44,36 +44,51 @@ where
 
     let tree = Arc::new(Tree::new_with_constant(root_node, exploration_constant));
     let mut threads = vec![];
-
     let finished_iterations: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
 
-    for _ in 0..thread_count {}
-    let tree_clone = Arc::clone(&tree);
-    let finished_iterations_clone: Arc<AtomicUsize> = Arc::clone(&finished_iterations);
-    let time_started = std::time::Instant::now();
-    let annotations: Vec<StateType::AnnotationType> = vec![];
-    threads.push(std::thread::spawn(move || loop {
-        {
-            trace!(
-                "Starting iteration {}",
-                finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
-            );
-            let (result, annotation) = tree_clone.iterate();
-            let current_iterations =
-                finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            trace!("Finished iteration {}", current_iterations);
-            if current_iterations >= iterations
-                || result == Selection::FullyExplored
-                || time_started.elapsed() > time_limit.unwrap_or(std::time::Duration::MAX)
-            {
-                break;
-            }
-        }
-    }));
+    for _ in 0..thread_count {
+        let tree_clone = Arc::clone(&tree);
+        let finished_iterations_clone = Arc::clone(&finished_iterations);
+        let time_started = std::time::Instant::now();
 
-    for thread in threads {
-        thread.join().unwrap();
+        // Spawn a thread that returns a Vec of annotations
+        threads.push(std::thread::spawn(
+            move || -> Vec<StateType::AnnotationType> {
+                let mut annotations = vec![];
+                loop {
+                    trace!(
+                        "Starting iteration {}",
+                        finished_iterations_clone.load(std::sync::atomic::Ordering::SeqCst)
+                    );
+
+                    let (result, annotation) = tree_clone.iterate();
+
+                    if let Some(annotation) = annotation {
+                        annotations.push(annotation);
+                    }
+
+                    let current_iterations =
+                        finished_iterations_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+                    trace!("Finished iteration {}", current_iterations);
+
+                    if current_iterations >= iterations
+                        || result == Selection::FullyExplored
+                        || time_started.elapsed() > time_limit.unwrap_or(std::time::Duration::MAX)
+                    {
+                        break;
+                    }
+                }
+                annotations
+            },
+        ));
     }
+
+    // Collect results from all threads
+    let annotations: Vec<StateType::AnnotationType> = threads
+        .into_iter()
+        .flat_map(|handle| handle.join().unwrap()) // Join each thread and concatenate results
+        .collect();
 
     log::debug!(
         "Completed {} iterations",
