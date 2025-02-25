@@ -124,7 +124,10 @@ fn main() {
         .init();
 
     (0..args.episodes)
-        .map(|iteration| format!("{}/{}", reports_folder, iteration))
+        .map(|iteration| {
+            let width = args.episodes.to_string().len();
+            format!("{}/{:0>width$}", reports_folder, iteration, width = width)
+        })
         .for_each(|filename| {
             match args.game {
                 Games::C4 => run_explore(
