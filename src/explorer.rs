@@ -11,7 +11,6 @@ use games::Games;
 use games::{C4, CS, EBR, NT};
 use log::Record;
 use mon2y::{calculate_best_turn, BestTurnPolicy};
-use std::io;
 use std::io::Write;
 use std::thread;
 use std::time::Instant;

@@ -16,11 +16,24 @@ data files. It's serving its purpose, and it doesn't need to
 be built for maintainability.
 */
 
-enum EndGameReason {
+const TAKE_RESOURCES_LIMIT: Option<usize> = None;
+const DEFER_BONDS: bool = false;
+
+#[derive(Debug, Clone, Copy, Serialize, Ord, PartialOrd, Hash, Eq, PartialEq)]
+enum EndGameConditions {
     Shares,
     Bonds,
     Track,
-    Resources,
+    Resources
+}
+
+
+#[derive(Debug, Clone, Serialize, Hash, Ord, PartialOrd, Eq, PartialEq)]
+enum EndGameReasons {
+    AllDividends,
+    Bankruptcy,
+    Stalemate,
+    Conditions(BTreeSet<EndGameConditions>),
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -62,11 +75,7 @@ struct Bond {
 const BONDS: [Bond; 7] = [
     Bond {
         face_value: 5,
-        coupon: 1,
-    },
-    Bond {
-        face_value: 5,
-        coupon: 1,
+        coupon: 2,
     },
     Bond {
         face_value: 10,
@@ -78,15 +87,19 @@ const BONDS: [Bond; 7] = [
     },
     Bond {
         face_value: 10,
-        coupon: 4,
-    },
-    Bond {
-        face_value: 15,
         coupon: 4,
     },
     Bond {
         face_value: 15,
         coupon: 5,
+    },
+    Bond {
+        face_value: 15,
+        coupon: 6,
+    },
+    Bond {
+        face_value: 15,
+        coupon: 7,
     },
 ];
 
@@ -201,7 +214,7 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
                 stock_available: 1,
                 track_available: 0,
                 initial_treasury: 10,
-                initial_interest: 2,
+                initial_interest: 0,
             },
         );
         m.insert(
@@ -290,17 +303,17 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Plain,
         CommonAttributes {
-            build_cost: 3,
+            build_cost: 4,
             symbol: Some("\u{1B}[37m-"),
             buildable: true,
             multiple_allowed: true,
-            revenue: [0, 0, 0, 0, 0, 0],
+            revenue: [1, 1, 0, 0, 0, 0],
         },
     );
     map.insert(
         Terrain::Forest,
         CommonAttributes {
-            build_cost: 4,
+            build_cost: 5,
             symbol: Some("\u{1B}[32m="),
             buildable: true,
             multiple_allowed: false,
@@ -310,7 +323,7 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Mountain,
         CommonAttributes {
-            build_cost: 6,
+            build_cost: 7,
             symbol: Some("\u{1B}[32m^"),
             multiple_allowed: false,
             buildable: true,
@@ -407,7 +420,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Hobart".to_string()),
-            revenue: ([5, 5, 4, 4, 3, 3]),
+            revenue: ([7, 7, 5, 5, 3, 3]),
             additional_cost: 0,
         },
     );
@@ -554,12 +567,12 @@ impl Action for EBRAction {
             let Actor::Player(actor) = state.next_actor else {
                 unreachable!()
             };
-            state.turns.push((actor, self.clone()));
+            state.turns.push((actor, *self));
         }
 
         match self {
             EBRAction::Stalemate => {
-                state.terminal = true;
+                state.end_game_state = Some(EndGameReasons::Stalemate);
                 state
             }
             EBRAction::Bid(bid) => {
@@ -967,7 +980,7 @@ enum Stage {
     TakeResources {
         company: Company,
         delivery_company: Company,
-        taken_resources: u8,
+        taken_resources: usize,
     },
     ChooseTakeResourcesCompany,
     ChooseAuctionCompany,
@@ -979,21 +992,39 @@ enum Stage {
 }
 
 #[derive(Serialize, Debug)]
+pub struct CompanyPerDiv<ValueType> {
+    dividend: usize,
+    company: Company,
+    value: ValueType
+}
+
+#[derive(Serialize, Debug)]
+pub struct PlayerPerDiv<ValueType> {
+    dividend: usize,
+    player: PlayerID,
+    value: ValueType
+}
+
+#[derive(Serialize, Debug)]
 pub struct EBRAnnotation {
     reward: Vec<f64>,
     cash: HashMap<PlayerID,isize>,
-    bankruptcy: bool,
+    end_game_reason: EndGameReasons,
+    dividends_paid: usize,
     track: Vec<Track>,
     turns: Vec<(PlayerID, EBRAction)>,
     holdings: HashMap<PlayerID, HashMap<Company, usize>>,
-    initial_stock_holder: HashMap<Company, Option<PlayerID>>,
     private_hq_locations: HashMap<Company, Option<Coordinate>>,
+    initial_stock_holder: HashMap<Company, Option<PlayerID>>,
+    cash_after_each_div: Vec<PlayerPerDiv<isize>>,
+    rev_after_each_div: Vec<CompanyPerDiv<isize>>,
+    div_per_share_after_each_div: Vec<CompanyPerDiv<isize>>
 }
 
 #[derive(Clone, Debug)]
 pub struct EBRState {
     turns: Vec<(PlayerID, EBRAction)>,
-    terminal: bool,
+    end_game_state: Option<EndGameReasons>,
     next_actor: Actor<EBRAction>,
     active_player: PlayerID,
     player_count: u8,
@@ -1008,7 +1039,14 @@ pub struct EBRState {
     unissued_bonds: Vec<Bond>,
     resource_cubes: Vec<Coordinate>,
     narrow_gauge_remaining: usize,
+    
+    // All for annotation's sake.
+    // Should be removed if this was to just play well - but it's here, because exploration is my
+    // priority
     initial_stock_holder: HashMap<Company, Option<PlayerID>>,
+    cash_after_each_div: HashMap<(usize, PlayerID), isize>,
+    rev_after_each_div: HashMap<(usize, Company), isize>,
+    div_per_share_after_each_div: HashMap<(usize, Company), isize>
 }
 
 impl EBRState {
@@ -1373,7 +1411,7 @@ impl EBRState {
             .bonds
             .iter()
             .filter_map(|b| {
-                if b.deferred {
+                if DEFER_BONDS && b.deferred {
                     None
                 } else {
                     Some(b.bond.coupon)
@@ -1384,26 +1422,38 @@ impl EBRState {
     }
 
     fn pay_dividend(&mut self) {
-        let rev_per_share = self
+        let revenue = self
             .company_details
             .iter()
-            .map(|c| {
+            .map(|c| 
                 (
                     *c.0,
-                    if c.1.shares_held > 0 {
+                    self.net_revenue(*c.0)
+                ))
+                .collect::<HashMap<_, _>>();
+        self.rev_after_each_div.extend(
+            revenue
+            .iter()
+            .map(|c| ((self.dividends_paid, *c.0), *c.1))
+            .collect::<HashMap<_,_>>()
+        );
+        let rev_per_share = revenue.clone().iter().map(|c|
+                    (*c.0, {
+                        let shares_held = self.company_details[c.0].shares_held;
+                        if shares_held > 0 {
                         let rev = self.net_revenue(*c.0);
                         // Ceil over 0, floor under 0
                         if rev > 0 {
-                            div_ceil(rev, c.1.shares_held as isize)
+                            div_ceil(rev, shares_held as isize)
                         } else {
-                            -div_ceil(-rev, c.1.shares_held as isize)
-                        }
-                    } else {
-                        0
-                    },
-                )
-            })
+                            -div_ceil(-rev, shares_held as isize)
+                        }} else {0}}))
             .collect::<HashMap<_, _>>();
+        self.div_per_share_after_each_div.extend(
+            rev_per_share
+            .iter()
+            .map(|c| ((self.dividends_paid, *c.0), *c.1))
+        );
         self.next_actor = {
             let Actor::Player(actor) = self.next_actor else {
                 unreachable!()
@@ -1424,7 +1474,11 @@ impl EBRState {
                 )
             })
             .collect::<HashMap<u8, isize>>();
-
+        self.cash_after_each_div.extend(
+            self.player_cash
+            .iter()
+            .map(|c| ((self.dividends_paid, *c.0), *c.1))
+        );
         for company in self.company_details.values_mut() {
             for bond in company.bonds.iter_mut() {
                 bond.deferred = true;
@@ -1432,27 +1486,35 @@ impl EBRState {
         }
         self.dividends_paid += 1;
 
-        self.terminal = self.dividends_paid == 6
-            // TODO: Add bankruptcy
-            || self.player_cash.iter().any(|(_, cash)| *cash < 0)
-            ||
-            // Two of these conditions must be met
-             [self.company_details
+        self.end_game_state = {
+            if self.dividends_paid == 6 {
+                Some(EndGameReasons::AllDividends)
+            } else if self.player_cash.iter().any(|(_, cash)| *cash < 0){
+                Some(EndGameReasons::Bankruptcy)
+            } else {
+                let mut conditions: BTreeSet<EndGameConditions> = BTreeSet::new();
+                if self.company_details
                     .iter()
                     .filter(|c| c.1.shares_remaining > 0)
                     .count()
-                    == 0,
-                // <= 2 bonds remaining
-                self.unissued_bonds.len() <= 2,
-                // TODO: 3/4 charters have no remaining trains
-                // <=3 resource cubes on board
-                self.resource_cubes.len() <= 3]
-            .iter()
-            .filter(|criteria| **criteria)
-            .count()
-                >= 2
+                    == 0 {
+                        conditions.insert(EndGameConditions::Shares);
+                }
+                    if self.unissued_bonds.len() <= 2 {conditions.insert(EndGameConditions::Bonds);}
+                    if self.resource_cubes.len() <= 3 {conditions.insert(EndGameConditions::Resources);}
+                    if (self.company_details.values().map(|c| c.track_remaining).sum::<usize>()
+                        + self.narrow_gauge_remaining) <=3 {conditions.insert(EndGameConditions::Track);}
+                    if conditions.len() >= 2 {
+                        Some(EndGameReasons::Conditions(conditions))
+                    }
+                    else {
+                        None
+                    }
+                        
+                    }
+                                }
+        }
     }
-}
 
 impl State for EBRState {
     type ActionType = EBRAction;
@@ -1466,7 +1528,7 @@ impl State for EBRState {
         let Actor::Player(next_actor) = self.next_actor else {
             unreachable!()
         };
-        if self.terminal {
+        if self.end_game_state.is_some() {
             return vec![];
         }
         match &self.stage {
@@ -1641,11 +1703,14 @@ impl State for EBRState {
                 delivery_company,
                 taken_resources,
             } => {
-                let mut actions = self
+                
+                let mut actions: Vec<EBRAction> = {
+                if TAKE_RESOURCES_LIMIT.is_none() || *taken_resources < TAKE_RESOURCES_LIMIT.unwrap() {
+                    self
                     .company_accessible_resources(*company)
                     .iter()
                     .map(|coord| EBRAction::TakeResources(*coord))
-                    .collect::<Vec<EBRAction>>();
+                    .collect::<Vec<EBRAction>>()} else { vec![] }};
                 if *taken_resources > 0 {
                     actions.push(EBRAction::PassTakeResources)
                 };
@@ -1660,7 +1725,8 @@ impl State for EBRState {
 
     fn reward(&self) -> Vec<f64> {
         // TODO: Improve this - this isn't great. 1 for best, -1 for lost, 0 for others.
-        if !self.terminal {
+        if self.end_game_state.is_none()
+        {
             return vec![0f64; self.player_count as usize];
         }
         let mut cash_rewards = vec![0f64; self.player_count as usize];
@@ -1678,7 +1744,7 @@ impl State for EBRState {
     }
 
     fn terminal(&self) -> bool {
-        self.terminal
+        self.end_game_state.is_some()
     }
 
 
@@ -1686,7 +1752,8 @@ impl State for EBRState {
         Some(EBRAnnotation {
                reward: self.reward(), 
                cash: self.player_cash.clone(),
-               bankruptcy: self.player_cash.iter().any(|(_, cash)| *cash < 0),
+               end_game_reason: self.end_game_state.clone().unwrap(),
+               dividends_paid: self.dividends_paid,
                track: self.track.clone(),
                holdings: self.holdings.iter().map(|(player, holdings)| {
                    (*player, holdings.iter().fold(HashMap::new(), |mut acc, company| {
@@ -1695,14 +1762,21 @@ impl State for EBRState {
                    }))
                }).collect(),
                turns: self.turns.clone(),
-               initial_stock_holder: self.initial_stock_holder.clone(),
                private_hq_locations:
                self.company_details
                .iter()
                .filter(|(company, _)| COMPANY_FIXED_DETAILS[company].private)
                .map(|(company, details)| (*company, details.hq))
-               .collect()
-
+               .collect(),
+               
+               initial_stock_holder: self.initial_stock_holder.clone(),
+               cash_after_each_div:  self.cash_after_each_div.iter().map(|(div_player, cash)| 
+                   PlayerPerDiv{dividend:div_player.0, player: div_player.1, value: *cash}).collect(),
+               rev_after_each_div: self.rev_after_each_div.iter().map(|(div_company, rev)|
+                   CompanyPerDiv{dividend:div_company.0, company: div_company.1, value: *rev}).collect(),
+               div_per_share_after_each_div: self.div_per_share_after_each_div.iter().map(|(div_company, div_per_share)|
+                   CompanyPerDiv{dividend:div_company.0, company: div_company.1, value: *div_per_share}).collect(),
+               
         })
     }
 }
@@ -1718,11 +1792,10 @@ impl Game for EBR {
     fn init_game(&self) -> Self::StateType {
         EBRState {
             turns: vec![],
-            terminal: false,
+            end_game_state: None,
             next_actor: Actor::Player(0),
             player_count: self.player_count,
             track: INITIAL_TRACK.to_vec(),
-            initial_stock_holder: HashMap::new(),
             active_player: 0,
             stage: Stage::Auction {
                 initial_auction: true,
@@ -1768,6 +1841,11 @@ impl Game for EBR {
             unissued_bonds: BONDS.to_vec(),
             resource_cubes: INITIAL_RESOURCE_CUBES.to_vec(),
             narrow_gauge_remaining: NARROW_GAUGE_INITIAL,
+
+            initial_stock_holder: HashMap::new(),
+            cash_after_each_div: HashMap::new(),
+            rev_after_each_div: HashMap::new(),
+            div_per_share_after_each_div: HashMap::new(),
         }
     }
 
