@@ -16,9 +16,9 @@ data files. It's serving its purpose, and it doesn't need to
 be built for maintainability.
 */
 
-const TAKE_RESOURCES_LIMIT: Option<usize> = None;
+const TAKE_RESOURCES_LIMIT: Option<usize> = Some(3);
 const DEFER_BONDS: bool = false;
-
+const DEFER_BONDS_ROUND_1: bool = true;
 #[derive(Debug, Clone, Copy, Serialize, Ord, PartialOrd, Hash, Eq, PartialEq)]
 enum EndGameConditions {
     Shares,
@@ -72,14 +72,18 @@ struct Bond {
     face_value: usize,
     coupon: usize,
 }
-const BONDS: [Bond; 7] = [
+const BONDS: [Bond; 8] = [
+    Bond {
+        face_value: 5,
+        coupon: 1,
+    },
     Bond {
         face_value: 5,
         coupon: 2,
     },
     Bond {
         face_value: 10,
-        coupon: 3,
+        coupon: 2,
     },
     Bond {
         face_value: 10,
@@ -109,12 +113,12 @@ struct BondDetails {
     deferred: bool,
 }
 
-static INITIAL_CASH: LazyLock<HashMap<u8, u32>> = LazyLock::new(|| {
+static INITIAL_CASH: LazyLock<HashMap<u8, isize>> = LazyLock::new(|| {
     let mut m = HashMap::new();
-    m.insert(2, 20);
-    m.insert(3, 13);
-    m.insert(4, 10);
-    m.insert(5, 8);
+    m.insert(2, 15);
+    m.insert(3, 10);
+    m.insert(4, 8);
+    m.insert(5, 6);
     m
 });
 
@@ -187,7 +191,7 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
         m.insert(
             Company::LW,
             CompanyFixedDetails {
-                starting: Some((9, 4)),
+                starting: Some((10, 9)),
                 private: false,
                 stock_available: 3,
                 track_available: 10,
@@ -214,7 +218,7 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
                 stock_available: 1,
                 track_available: 0,
                 initial_treasury: 10,
-                initial_interest: 0,
+                initial_interest: 2,
             },
         );
         m.insert(
@@ -303,11 +307,11 @@ static TERRAIN_ATTRIBUTES: LazyLock<HashMap<Terrain, CommonAttributes>> = LazyLo
     map.insert(
         Terrain::Plain,
         CommonAttributes {
-            build_cost: 4,
+            build_cost: 2,
             symbol: Some("\u{1B}[37m-"),
             buildable: true,
             multiple_allowed: true,
-            revenue: [1, 1, 0, 0, 0, 0],
+            revenue: [2, 2, 2, 2, 0, 0],
         },
     );
     map.insert(
@@ -411,7 +415,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Port of Strahan".to_string()),
-            revenue: ([2, 2, 0, 0, 0, 0]),
+            revenue: ([3, 3, 2, 2, 0, 0]),
             additional_cost: 0,
         },
     );
@@ -420,7 +424,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Hobart".to_string()),
-            revenue: ([7, 7, 5, 5, 3, 3]),
+            revenue: ([6, 6, 10, 10, 5, 5]),
             additional_cost: 0,
         },
     );
@@ -438,7 +442,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Burnie".to_string()),
-            revenue: ([2, 2, 1, 1, 0, 0]),
+            revenue: ([3, 3, 2, 2, 1, 1]),
             additional_cost: 0,
         },
     );
@@ -447,7 +451,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Town,
             location_name: Some("Ulverstone".to_string()),
-            revenue: ([2, 2, 1, 1, 1, 1]),
+            revenue: ([3, 3, 2, 2, 1, 1]),
             additional_cost: 0,
         },
     );
@@ -456,7 +460,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Devonport".to_string()),
-            revenue: ([3, 3, 1, 1, 0, 0]),
+            revenue: ([5, 5, 2, 2, 0, 0]),
             additional_cost: 0,
         },
     );
@@ -465,7 +469,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Launceston".to_string()),
-            revenue: ([3, 3, 1, 1, 0, 0]),
+            revenue: ([4, 4, 8, 8, 2, 2]),
             additional_cost: 0,
         },
     );
@@ -474,7 +478,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Town,
             location_name: Some("Queenstown".to_string()),
-            revenue: ([2, 2, 2, 2, 2, 2]),
+            revenue: ([4, 4, 3, 2, 2, 2]),
             additional_cost: 0,
         },
     );
@@ -520,7 +524,7 @@ const INITIAL_TRACK: [Track; 4] = [
         track_type: TrackType::CompanyOwned(Company::LW),
     },
     Track {
-        location: (9, 4),
+        location: (10, 9),
         track_type: TrackType::CompanyOwned(Company::TMLC),
     },
     Track {
@@ -1014,6 +1018,7 @@ pub struct EBRAnnotation {
     track: Vec<Track>,
     turns: Vec<(PlayerID, EBRAction)>,
     holdings: HashMap<PlayerID, HashMap<Company, usize>>,
+    bonds: HashMap<Company, Vec<Bond>>,
     private_hq_locations: HashMap<Company, Option<Coordinate>>,
     initial_stock_holder: HashMap<Company, Option<PlayerID>>,
     cash_after_each_div: Vec<PlayerPerDiv<isize>>,
@@ -1411,7 +1416,7 @@ impl EBRState {
             .bonds
             .iter()
             .filter_map(|b| {
-                if DEFER_BONDS && b.deferred {
+                if (DEFER_BONDS && b.deferred) || (DEFER_BONDS_ROUND_1 && self.dividends_paid == 0) {
                     None
                 } else {
                     Some(b.bond.coupon)
@@ -1761,6 +1766,9 @@ impl State for EBRState {
                        acc
                    }))
                }).collect(),
+               bonds: self.company_details.iter().map(|(company, details)| {
+                   (*company, details.bonds.iter().map(|bond| bond.bond.clone()).collect())
+               }).collect(),
                turns: self.turns.clone(),
                private_hq_locations:
                self.company_details
@@ -1808,7 +1816,7 @@ impl Game for EBR {
                 .map(|i| (i, Vec::new()))
                 .collect::<HashMap<u8, Vec<Company>>>(),
             player_cash: (0..self.player_count)
-                .map(|i| (i, 24 / self.player_count as isize))
+                .map(|i| (i, INITIAL_CASH[&self.player_count]))
                 .collect::<HashMap<u8, isize>>(),
             revenue: ALL_COMPANIES.iter().map(|c| (*c, 0)).collect(),
             action_cubes: ACTION_CUBE_INIT,
