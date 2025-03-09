@@ -4,6 +4,7 @@ use std::cmp::max;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::LazyLock;
+use std::iter;
 
 use crate::game::Game;
 use crate::mon2y::game::{Action, Actor, State};
@@ -17,7 +18,7 @@ be built for maintainability.
 */
 
 const TAKE_RESOURCES_LIMIT: Option<usize> = Some(3);
-const DEFER_BONDS: bool = false;
+const DEFER_BONDS: bool = true;
 const DEFER_BONDS_ROUND_1: bool = true;
 #[derive(Debug, Clone, Copy, Serialize, Ord, PartialOrd, Hash, Eq, PartialEq)]
 enum EndGameConditions {
@@ -257,7 +258,6 @@ static COMPANY_FIXED_DETAILS: LazyLock<HashMap<Company, CompanyFixedDetails>> =
         m
     });
 
-const INITIAL_RESOURCE_CUBES: [Coordinate; 4] = [(2, 4), (2, 3), (3, 4), (3, 4)];
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CompanyDetails {
     shares_held: usize,
@@ -424,7 +424,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Hobart".to_string()),
-            revenue: ([6, 6, 10, 10, 5, 5]),
+            revenue: ([6, 6, 10, 10, 8, 8]),
             additional_cost: 0,
         },
     );
@@ -469,7 +469,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         Feature {
             feature_type: FeatureType::Port,
             location_name: Some("Launceston".to_string()),
-            revenue: ([4, 4, 8, 8, 2, 2]),
+            revenue: ([4, 4, 8, 8, 6, 6]),
             additional_cost: 0,
         },
     );
@@ -490,7 +490,7 @@ static FEATURES: LazyLock<HashMap<(usize, usize), Feature>> = LazyLock::new(|| {
         (FeatureType::Water2, (3, 7)),
         (FeatureType::Water1, (4, 7)),
         (FeatureType::Water1, (6, 8)),
-        (FeatureType::Water1, (6, 9)),
+        (FeatureType::Water2, (6, 9)),
         (FeatureType::Water1, (10, 9)),
         (FeatureType::Water2, (5, 11)),
         (FeatureType::Water2, (9, 11)),
@@ -540,9 +540,11 @@ const NARROW_GAUGE_INITIAL: usize = 12;
 const MAX_BUILDS: u8 = 3;
 const NARROW_TRACK_COST: usize = 2;
 const TAKE_RESOURCE_COST: usize = 3;
-const TAKE_DIVIDEND: usize = 1;
-const TAKE_TOWN_DELIVER_DIVIDEND: usize = 1;
-const TAKE_PORT_DELIVER_DIVIDEND: usize = 1;
+const TAKE_DIVIDEND: usize = 2;
+const TAKE_TOWN_DELIVER_DIVIDEND: usize = 3;
+const TAKE_PORT_DELIVER_DIVIDEND: usize = 4;
+const FOREST_RESOURCES: usize = 1;
+const MOUNTAIN_RESOURCES: usize = 2;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize)]
 pub enum EBRAction {
@@ -765,23 +767,9 @@ impl Action for EBRAction {
                         track_type: TrackType::Narrow,
                     });
                 }
+
                 // Place resource cubes around
-                let mut potential_locations = get_neighbors(*location);
-                potential_locations.push(*location);
-                for location in potential_locations {
-                    if location.0 >= WIDTH || location.1 >= HEIGHT {
-                        continue;
-                    }
-                    let terrain = TERRAIN[location.1][location.0];
-                    match terrain {
-                        Terrain::Forest => state.resource_cubes.push(location),
-                        Terrain::Mountain => {
-                            state.resource_cubes.push(location);
-                            state.resource_cubes.push(location);
-                        }
-                        _ => {}
-                    };
-                }
+                state.resources_to_place(*location).iter().for_each(|c| state.resource_cubes.push(*c));
 
                 state
             }
@@ -908,32 +896,29 @@ impl Action for EBRAction {
                     taken_resources,
                 } = state.stage
                 {
-                    state.resource_cubes.retain(|c| c != coordinate);
-
                     {
-                        let mut new_cash = state.player_cash.clone();
-                        state.holdings.iter().for_each(|(&player, companies)| {
-                            {
-                                companies.iter().for_each(|c| {
-                                    if *c == company {
-                                        *new_cash.get_mut(&player).unwrap() +=
-                                            TAKE_DIVIDEND as isize;
-                                    }
-
-                                    if *c == delivery_company {
-                                        if state.has_port(delivery_company) {
-                                            *new_cash.get_mut(&player).unwrap() +=
-                                                TAKE_PORT_DELIVER_DIVIDEND as isize;
-                                        } else if state.has_town(delivery_company) {
-                                            *new_cash.get_mut(&player).unwrap() +=
-                                                TAKE_TOWN_DELIVER_DIVIDEND as isize;
-                                        }
-                                    }
-                                })
+                        state.resource_cubes.retain(|c| c != coordinate);
+                        // The owner gets the cash from the resource - so, company if merged, player
+                        // if private.
+                        let merged = state.company_details[&company].merged.unwrap_or(false);
+                        let div = {
+                            if state.has_port(delivery_company) { TAKE_PORT_DELIVER_DIVIDEND }
+                            else if state.has_town(delivery_company) {
+                                TAKE_TOWN_DELIVER_DIVIDEND
                             }
-                        });
+                            else {
+                                TAKE_DIVIDEND
+                            }
+                        };
+                        if merged {
+                            let owner = *state.company_details.iter().find(|(_,c)| c.owned_privates.contains(&company)).unwrap().0;
+                            let company_details = state.company_details.get_mut(&owner).unwrap();
+                            company_details.cash += div as isize;
+                        } else {
+                            let owner = state.holdings.iter().find(|(_,c)| c.contains(&company)).unwrap().0;
+                            *state.player_cash.get_mut(owner).unwrap() += div as isize;
+                        };
 
-                        state.player_cash = new_cash;
                     };
 
                     state.stage = Stage::TakeResources {
@@ -1159,6 +1144,19 @@ impl EBRState {
                 |(private_co, public_co)| self.connected_to(*private_co, *public_co),
             )
             .collect()
+    }
+
+    fn resources_to_place(&self, coord: Coordinate) -> Vec<Coordinate> {
+        get_neighbors(coord)
+            .iter()
+            .filter(|c| c.0 < WIDTH && c.1 < HEIGHT && c.0 > 0 && c.1 > 0)
+            .flat_map(|c| iter::repeat(c).take(match TERRAIN[c.1][c.0] {
+                Terrain::Mountain => MOUNTAIN_RESOURCES,
+                Terrain::Forest => FOREST_RESOURCES,
+                _ => 0,
+            }))
+        .cloned()
+                .collect()
     }
 
     fn connected_to(&self, private_co: Company, public_co: Company) -> bool {
@@ -1486,7 +1484,7 @@ impl EBRState {
         );
         for company in self.company_details.values_mut() {
             for bond in company.bonds.iter_mut() {
-                bond.deferred = true;
+                bond.deferred = false;
             }
         }
         self.dividends_paid += 1;
@@ -1496,7 +1494,7 @@ impl EBRState {
                 Some(EndGameReasons::AllDividends)
             } else if self.player_cash.iter().any(|(_, cash)| *cash < 0){
                 Some(EndGameReasons::Bankruptcy)
-            } else {
+            }  else {
                 let mut conditions: BTreeSet<EndGameConditions> = BTreeSet::new();
                 if self.company_details
                     .iter()
@@ -1767,7 +1765,7 @@ impl State for EBRState {
                    }))
                }).collect(),
                bonds: self.company_details.iter().map(|(company, details)| {
-                   (*company, details.bonds.iter().map(|bond| bond.bond.clone()).collect())
+                   (*company, details.bonds.iter().map(|bond| bond.bond).collect())
                }).collect(),
                turns: self.turns.clone(),
                private_hq_locations:
@@ -1798,7 +1796,7 @@ impl Game for EBR {
     type ActionType = EBRAction;
 
     fn init_game(&self) -> Self::StateType {
-        EBRState {
+        let mut state = EBRState {
             turns: vec![],
             end_game_state: None,
             next_actor: Actor::Player(0),
@@ -1847,14 +1845,16 @@ impl Game for EBR {
                 })
                 .collect(),
             unissued_bonds: BONDS.to_vec(),
-            resource_cubes: INITIAL_RESOURCE_CUBES.to_vec(),
+            resource_cubes: vec![],
             narrow_gauge_remaining: NARROW_GAUGE_INITIAL,
 
             initial_stock_holder: HashMap::new(),
             cash_after_each_div: HashMap::new(),
             rev_after_each_div: HashMap::new(),
             div_per_share_after_each_div: HashMap::new(),
-        }
+        };
+        state.resources_to_place(COMPANY_FIXED_DETAILS[&Company::GT].starting.unwrap()).iter().for_each(|r| state.resource_cubes.push(*r));
+        state
     }
 
     fn visualise_state(&self, state: &Self::StateType) {
